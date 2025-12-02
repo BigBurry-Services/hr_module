@@ -1,13 +1,22 @@
 {% load static %}
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}HR Module{% endblock %}</title>
     <link rel="stylesheet" href="{% static 'core/style.css' %}">
 </head>
 <body>
+    <div class="menu-icon" id="menuIcon">
+        <span></span>
+        <span></span>
+        <span></span>
+    </div>
+
     {% block content %}{% endblock %}
 
+    <script src="{% static 'core/script.js' %}"></script>
     <script>
         function togglePasswordVisibility(fieldId) {
             const passwordField = document.getElementById(fieldId);

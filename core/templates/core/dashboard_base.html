@@ -15,10 +15,9 @@
                 <li><a href="{% url 'department_list' %}" class="{% if request.resolver_match.url_name == 'department_list' %}active{% endif %}">Manage Departments</a></li>
                 <li><a href="{% url 'designation_list' %}" class="{% if request.resolver_match.url_name == 'designation_list' %}active{% endif %}">Manage Designations</a></li>
                 <li><a href="{% url 'allowance_list' %}" class="{% if request.resolver_match.url_name == 'allowance_list' %}active{% endif %}">Manage Allowances</a></li>
-            </ul>
-            <div class="logout-link">
-                <a href="{% url 'logout' %}">Logout</a>
-            </div>
+
+                <a style="margin: 15px;color: white; margin-top: 30px;" href="{% url 'logout' %}">Logout</a>
+
         </div>
         <div class="main-content">
             <div class="main-content-header">
