@@ -1,0 +1,17 @@
+{% extends 'core/dashboard_base.html' %}
+{% load static %}
+
+{% block dashboard_title %}Confirm Delete Allowance{% endblock %}
+
+{% block page_title %}Confirm Delete Allowance{% endblock %}
+
+{% block dashboard_content %}
+    <p>Are you sure you want to delete <strong>"{{ allowance.name }}"</strong>?</p>
+    <form method="post" class="card">
+        {% csrf_token %}
+        <div class="form-actions">
+            <button type="submit" class="btn btn-danger">Yes, Delete</button>
+            <a href="{% url 'allowance_list' %}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+{% endblock %}

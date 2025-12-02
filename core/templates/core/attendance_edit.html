@@ -1,0 +1,17 @@
+{% extends 'core/dashboard_base.html' %}
+{% load static %}
+
+{% block dashboard_title %}Edit Attendance{% endblock %}
+
+{% block page_title %}Edit Attendance Record{% endblock %}
+
+{% block dashboard_content %}
+    <form method="post" class="card">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <div class="form-actions">
+            <button type="submit" class="btn">Update Attendance</button>
+            <a href="{% url 'attendance_mark' %}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+{% endblock %}

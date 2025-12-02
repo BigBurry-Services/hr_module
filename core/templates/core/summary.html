@@ -1,0 +1,28 @@
+{% extends 'core/dashboard_base.html' %}
+{% load static %}
+
+{% block dashboard_title %}Salary Summary{% endblock %}
+
+{% block page_title %}Salary Summary{% endblock %}
+
+{% block dashboard_content %}
+    <form method="post" class="card">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <div class="form-actions">
+            <button type="submit" class="btn">Generate Summary</button>
+        </div>
+    </form>
+
+    {% if summary_data %}
+        <hr>
+        <div class="card mt-3">
+            <h2>Results for {{ summary_data.employee_name }} ({{ summary_data.month }})</h2>
+            <p><strong>Total Working Days:</strong> {{ summary_data.total_working_days }}</p>
+            <p><strong>Total Present Days:</strong> {{ summary_data.total_present_days }}</p>
+            <p><strong>Total Absent Days:</strong> {{ summary_data.total_absent_days }}</p>
+        </div>
+    {% elif form.is_bound %}
+        <p class="text-info mt-3">No attendance data found for the selected criteria.</p>
+    {% endif %}
+{% endblock %}

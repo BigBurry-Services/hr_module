@@ -1,0 +1,17 @@
+{% extends 'core/dashboard_base.html' %}
+{% load static %}
+
+{% block dashboard_title %}Confirm Delete Attendance{% endblock %}
+
+{% block page_title %}Confirm Delete Attendance Record{% endblock %}
+
+{% block dashboard_content %}
+    <p>Are you sure you want to delete the attendance record for <strong>{{ attendance.employee.full_name }}</strong> on <strong>{{ attendance.date }}</strong>?</p>
+    <form method="post" class="card">
+        {% csrf_token %}
+        <div class="form-actions">
+            <button type="submit" class="btn btn-danger">Yes, Delete</button>
+            <a href="{% url 'attendance_mark' %}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+{% endblock %}

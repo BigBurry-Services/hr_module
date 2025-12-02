@@ -1,0 +1,349 @@
+/* General Body Styles */
+body {
+    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    margin: 0;
+    background-color: #f0f2f5; /* Light gray background for a clean look */
+    color: #333;
+    line-height: 1.6;
+}
+
+/* Base Heading Styles */
+h1, h2, h3, h4, h5, h6 {
+    color: #2c3e50; /* Dark blue-gray for professionalism */
+    margin-bottom: 15px;
+    font-weight: 600;
+}
+
+h1 { font-size: 2em; }
+h2 { font-size: 1.6em; }
+
+/* Links */
+a {
+    color: #007bff; /* Standard blue for links */
+    text-decoration: none;
+    transition: color 0.3s ease;
+}
+
+a:hover {
+    color: #0056b3;
+}
+
+/* Buttons */
+button, input[type="submit"], .btn {
+    display: inline-block;
+    background-color: #007bff;
+    color: #fff;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1em;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+button:hover, input[type="submit"]:hover, .btn:hover {
+    background-color: #0056b3;
+    transform: translateY(-1px);
+}
+
+button:active, input[type="submit"]:active, .btn:active {
+    transform: translateY(0);
+}
+
+.btn-secondary {
+    background-color: #6c757d;
+}
+
+.btn-secondary:hover {
+    background-color: #5a6268;
+}
+
+.btn-danger {
+    background-color: #dc3545;
+}
+
+.btn-danger:hover {
+    background-color: #c82333;
+}
+
+.btn-sm {
+    padding: 5px 10px;
+    font-size: 0.8em;
+}
+
+/* Form Elements - General */
+form {
+    background-color: #fff;
+    padding: 30px;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+    margin-bottom: 20px;
+}
+
+label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: #34495e;
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="date"],
+input[type="time"],
+select,
+textarea {
+    width: calc(100% - 22px); /* Account for padding and border */
+    padding: 10px;
+    margin-bottom: 15px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 1em;
+    color: #495057;
+    background-color: #fff;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus,
+input[type="number"]:focus,
+input[type="date"]:focus,
+input[type="time"]:focus,
+select:focus,
+textarea:focus {
+    border-color: #80bdff;
+    outline: 0;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+/* Checkbox and Radio styling */
+input[type="checkbox"],
+input[type="radio"] {
+    margin-right: 8px;
+}
+
+/* Error Messages */
+.errorlist {
+    color: #dc3545; /* Red for errors */
+    list-style-type: none;
+    padding: 0;
+    margin-top: -10px;
+    margin-bottom: 10px;
+    font-size: 0.9em;
+}
+
+.errorlist li {
+    margin-bottom: 5px;
+}
+
+/* Utility Classes */
+.text-danger {
+    color: #dc3545;
+}
+
+.text-success {
+    color: #28a745;
+}
+
+.text-info {
+    color: #17a2b8;
+}
+
+.card {
+    background-color: #fff;
+    padding: 30px;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+    margin-bottom: 20px;
+}
+
+/* Layout Containers */
+.container {
+    width: 90%;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 0;
+}
+
+/* Auth Pages (Login/Register) */
+.register-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    background-color: #e9ecef; /* Light gray background */
+}
+
+.register-container h1 {
+    color: #343a40;
+    margin-bottom: 30px;
+    font-size: 24px; /* Smaller font size for auth page */
+}
+
+.register-container form {
+    max-width: 450px;
+    width: 100%;
+    padding: 40px;
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+.register-container p {
+    margin-top: 20px;
+    font-size: 0.95em;
+    color: #6c757d;
+}
+
+.register-container a {
+    color: #007bff;
+    font-weight: 500;
+}
+
+/* Dashboard Layout */
+.dashboard-layout {
+    display: flex;
+    min-height: 100vh;
+}
+
+.sidebar {
+    width: 200px;
+    background-color: #2c3e50; /* Dark blue-gray for sidebar */
+    color: #ecf0f1; /* Light text */
+    padding: 10px;
+    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+    display: flex;
+    flex-direction: column;
+    position: fixed; /* Make sidebar fixed */
+    height: 98vh;
+    overflow-y: auto; /* Allow sidebar content to scroll if too long */
+}
+
+.sidebar h2 {
+    color: #fff;
+    text-align: center;
+    margin-bottom: 10px;
+    font-size: 1.5em;
+}
+
+.sidebar ul {
+    list-style: none;
+    padding: 0;
+    flex-grow: 1; /* Allows the nav list to take available space */
+}
+
+.sidebar ul li {
+    margin-bottom: 10px;
+}
+
+.sidebar ul li a {
+    color: #ecf0f1;
+    text-decoration: none;
+    display: block;
+    padding: 10px 12px;
+    border-radius: 4px;
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.sidebar ul li a:hover,
+.sidebar ul li a.active {
+    background-color: #34495e; /* Slightly lighter blue-gray on hover/active */
+    color: #fff;
+}
+
+.sidebar .logout-link {
+    margin-bottom: 10px; /* Pushes the logout link to the bottom */
+    padding-top: 5px; /* Add some space above it */
+    text-align: center;
+}
+
+.sidebar .logout-link a {
+    color: #f8d7da; /* Light red for logout */
+    padding: 10px 15px;
+    border: 1px solid #f8d7da;
+    border-radius: 4px;
+    display: inline-block;
+}
+
+.sidebar .logout-link a:hover {
+    background-color: #f8d7da;
+    color: #721c24; /* Dark red text on hover */
+}
+
+
+.main-content {
+    flex-grow: 1;
+    margin-left: 250px; /* Offset main content by sidebar width */
+    padding: 30px;
+    background-color: #f0f2f5;
+    overflow-y: auto; /* Allow main content to scroll */
+    height: 100vh; /* Full viewport height */
+}
+
+.main-content-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+}
+
+.main-content-header h1 {
+    margin: 0;
+}
+
+/* Table Styles */
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    background-color: #fff;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    border-radius: 8px;
+    overflow: hidden; /* Ensures rounded corners apply to content */
+}
+
+.data-table th, .data-table td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #e0e6ed;
+}
+
+.data-table th {
+    background-color: #f8f9fa; /* Light header background */
+    color: #495057;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.9em;
+}
+
+.data-table tbody tr:hover {
+    background-color: #f2f4f6; /* Subtle hover effect */
+}
+
+.data-table .actions a {
+    margin-right: 10px;
+    font-size: 0.9em;
+}
+
+.data-table .actions a:last-child {
+    margin-right: 0;
+}
+
+/* Specific styling for forms */
+.form-group {
+    margin-bottom: 15px;
+}
+
+.form-group label {
+    margin-bottom: 5px;
+}
+
+.form-actions {
+    margin-top: 20px;
+    display: flex;
+    gap: 10px; /* Space between buttons */
+}

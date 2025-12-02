@@ -1,0 +1,43 @@
+{% extends 'core/dashboard_base.html' %}
+{% load static %}
+
+{% block dashboard_title %}Employee Detail{% endblock %}
+
+{% block page_title %}Employee Detail: {{ employee.full_name }}{% endblock %}
+
+{% block dashboard_content %}
+    <div class="detail-grid">
+        <p><strong>Employee Code:</strong> {{ employee.employee_code }}</p>
+        <p><strong>Full Name:</strong> {{ employee.full_name }}</p>
+        <p><strong>Address:</strong> {{ employee.address }}</p>
+        <p><strong>Date of Birth:</strong> {{ employee.date_of_birth|default:"N/A" }}</p>
+        <p><strong>Contact Number:</strong> {{ employee.contact_number|default:"N/A" }}</p>
+        <p><strong>Aadhar Number:</strong> {{ employee.aadhar_number|default:"N/A" }}</p>
+        <p><strong>Sex:</strong> {{ employee.get_sex_display|default:"N/A" }}</p>
+        <p><strong>Nationality:</strong> {{ employee.nationality|default:"N/A" }}</p>
+        <p><strong>State:</strong> {{ employee.state|default:"N/A" }}</p>
+        <p><strong>Joining Date:</strong> {{ employee.joining_date }}</p>
+        <p><strong>Department:</strong> {{ employee.department.name|default:"N/A" }}</p>
+        <p><strong>Designation:</strong> {{ employee.designation.name|default:"N/A" }}</p>
+        <p><strong>Previous Experience:</strong> {{ employee.previous_experience|default:"N/A" }}</p>
+        <p><strong>Employment Type:</strong> {{ employee.get_employment_type_display }}</p>
+        <p><strong>Basic Salary:</strong> {{ employee.basic_salary }}</p>
+        <p><strong>DA:</strong> {{ employee.da }}</p>
+        <p><strong>HRA:</strong> {{ employee.hra }}</p>
+        <p><strong>Allowances:</strong> 
+            {% if employee.allowances.all %}
+                <ul>
+                    {% for allowance in employee.allowances.all %}
+                        <li>{{ allowance.name }} (Amount: {{ allowance.amount }})</li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                N/A
+            {% endif %}
+        </p>
+    </div>
+    <div class="form-actions">
+        <a href="{% url 'employee_edit' employee.id %}" class="btn">Edit Employee</a>
+        <a href="{% url 'employee_list' %}" class="btn btn-secondary">Back to Employee List</a>
+    </div>
+{% endblock %}

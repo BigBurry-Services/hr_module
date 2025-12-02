@@ -1,0 +1,17 @@
+{% extends 'core/dashboard_base.html' %}
+{% load static %}
+
+{% block dashboard_title %}Edit Employee{% endblock %}
+
+{% block page_title %}Edit Employee{% endblock %}
+
+{% block dashboard_content %}
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <div class="form-actions">
+            <button type="submit" class="btn">Update Employee</button>
+            <a href="{% url 'employee_list' %}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+{% endblock %}

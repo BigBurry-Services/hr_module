@@ -1,0 +1,44 @@
+{% extends 'core/dashboard_base.html' %}
+{% load static %}
+
+{% block page_title %}Manage Allowances{% endblock %}
+
+{% block dashboard_content %}
+    
+    <form method="post" class="card">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <div class="form-actions">
+            <button type="submit" class="btn">Add Allowance</button>
+        </div>
+    </form>
+    
+    <hr>
+    
+    <h2>Existing Allowances</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Allowance Name</th>
+                <th>Amount</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for allowance in allowances %}
+            <tr>
+                <td>{{ allowance.name }}</td>
+                <td>{{ allowance.amount }}</td>
+                <td class="actions">
+                    <a href="{% url 'allowance_edit' allowance.id %}" class="btn btn-sm">Edit</a>
+                    <a href="{% url 'allowance_delete' allowance.id %}" class="btn btn-sm btn-danger">Delete</a>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="3">No allowances found.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endblock %}

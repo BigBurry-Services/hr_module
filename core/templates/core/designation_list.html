@@ -1,0 +1,42 @@
+{% extends 'core/dashboard_base.html' %}
+{% load static %}
+
+{% block page_title %}Manage Designations{% endblock %}
+
+{% block dashboard_content %}
+    
+    <form method="post" class="card">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <div class="form-actions">
+            <button type="submit" class="btn">Add Designation</button>
+        </div>
+    </form>
+    
+    <hr>
+    
+    <h2>Existing Designations</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Designation Name</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for designation in designations %}
+            <tr>
+                <td>{{ designation.name }}</td>
+                <td class="actions">
+                    <a href="{% url 'designation_edit' designation.id %}" class="btn btn-sm">Edit</a>
+                    <a href="{% url 'designation_delete' designation.id %}" class="btn btn-sm btn-danger">Delete</a>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="2">No designations found.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endblock %}

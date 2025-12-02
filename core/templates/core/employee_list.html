@@ -1,0 +1,44 @@
+{% extends 'core/dashboard_base.html' %}
+{% load static %}
+
+{% block dashboard_title %}Employee List{% endblock %}
+
+{% block page_title %}Employee List{% endblock %}
+
+{% block dashboard_content %}
+    <div class="main-content-header">
+        <a href="{% url 'employee_add' %}" class="btn">Add New Employee</a>
+    </div>
+
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Employee Code</th>
+                <th>Name</th>
+                <th>Department</th>
+                <th>Designation</th>
+                <th>Joining Date</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for employee in employees %}
+            <tr>
+                <td>{{ employee.employee_code }}</td>
+                <td><a href="{% url 'employee_detail' employee.id %}">{{ employee.full_name }}</a></td>
+                <td>{{ employee.department.name|default:"N/A" }}</td>
+                <td>{{ employee.designation.name|default:"N/A" }}</td>
+                <td>{{ employee.joining_date }}</td>
+                <td class="actions">
+                    <a href="{% url 'employee_edit' employee.id %}">Edit</a>
+                    <a href="{% url 'employee_delete' employee.id %}">Delete</a>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="6">No employees found.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endblock %}
