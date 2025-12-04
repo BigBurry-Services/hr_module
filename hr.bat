@@ -2,18 +2,18 @@
 setlocal enabledelayedexpansion
 
 :: Log start time
-echo ==== Django Task Started at %date% %time% ==== >> C:\test\django_log.txt
+echo ==== Django Task Started at %date% %time% ==== >> C:\HrModule\django_log.txt
 
 :: Activate virtual environment
-call "E:\BIGBURRY\SERVICES\Ashiq hr module\hr_module\env\Scripts\activate.bat" >> C:\test\django_log.txt 2>&1
+call "E:\hrmodule\hr_module\env\Scripts\activate.bat" >> C:\HrModule\django_log.txt 2>&1
 
 :: Go to the Django project directory
-cd /d "E:\BIGBURRY\SERVICES\Ashiq hr module\hr_module" >> C:\test\django_log.txt 2>&1
+cd /d "E:\hrmodule\hr_module\hr_module" >> C:\HrModule\django_log.txt 2>&1
 
 :: Run server (or your command)
-python manage.py runserver 0.0.0.0:8000 >> C:\test\django_log.txt 2>&1
+python manage.py runserver 0.0.0.0:80 >> C:\HrModule\django_log.txt 2>&1
 
 :: Log end time
-echo ==== Django Task Ended at %date% %time% ==== >> C:\test\django_log.txt
+echo ==== Django Task Ended at %date% %time% ==== >> C:\HrModule\django_log.txt
 
 exit
