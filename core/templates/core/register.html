@@ -4,12 +4,27 @@
 
 {% block content %}
 <div class="register-container">
-    <h1>Register</h1>
-    <form method="post">
-        {% csrf_token %}
-        {{ form.as_p }}
-        <input type="submit" value="Register">
-    </form>
-    <p>Already have an account? <a href="{% url 'login' %}">Login here</a>.</p>
+    <div class="card" style="width: 100%; max-width: 500px; padding: 2.5rem;">
+        <h1 style="text-align: center; margin-bottom: 2rem; color: var(--primary-color);">Create Account</h1>
+        <form method="post">
+            {% csrf_token %}
+            {% for field in form %}
+            <div class="form-group">
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% if field.errors %}
+                <ul class="errorlist">
+                    {% for error in field.errors %}
+                    <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+            </div>
+            {% endfor %}
+            <input type="submit" value="Register" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">
+        </form>
+        <p style="text-align: center; margin-top: 1.5rem;">Already have an account? <a href="{% url 'login' %}">Login
+                here</a>.</p>
+    </div>
 </div>
 {% endblock %}

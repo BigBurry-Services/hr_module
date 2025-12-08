@@ -1,0 +1,72 @@
+{% extends 'core/dashboard_base.html' %}
+{% load static %}
+
+{% block dashboard_title %}
+{% if form.instance.pk %}Edit Employee{% else %}Add Employee{% endif %}
+{% endblock %}
+
+{% block page_title %}
+{% if form.instance.pk %}Edit Employee: {{ form.instance.full_name }}{% else %}Add New Employee{% endif %}
+{% endblock %}
+
+{% block dashboard_content %}
+<form method="post" class="card">
+    {% csrf_token %}
+
+    <h3>Basic Details</h3>
+    <div style="display: flex; flex-wrap: wrap; gap: 1rem;">
+        {% for field in form %}
+        <div style="flex: 1 1 300px; min-width: 250px;">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.errors %}
+            <ul class="errorlist">
+                {% for error in field.errors %}
+                <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+
+    <hr>
+    <h3>Allowances</h3>
+    <p class="text-secondary" style="font-size: 0.9em;">Manage allowances for this employee. Click "Add another" to add
+        a new allowance.</p>
+
+    {{ formset.management_form }}
+    <div id="allowance-formset">
+        {% for form in formset %}
+        <div class="allowance-row card-sub"
+            style="display: flex; gap: 1rem; align-items: center; margin-bottom: 0.5rem; padding: 1rem; background: rgba(255,255,255,0.05); border-radius: 8px;">
+            {{ form.id }}
+            <div style="flex: 1;">
+                <label>{{ form.allowance.label }}</label>
+                {{ form.allowance }}
+            </div>
+            <div style="flex: 1;">
+                <label>{{ form.amount.label }}</label>
+                {{ form.amount }}
+            </div>
+            {% if formset.can_delete and form.instance.pk %}
+            <div style="display: flex; align-items: center;">
+                <label style="margin-right: 0.5rem;">Delete</label>
+                {{ form.DELETE }}
+            </div>
+            {% endif %}
+        </div>
+        {% if form.errors %}
+        <div class="text-danger">
+            {{ form.errors }}
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+
+    <div class="form-actions" style="margin-top: 2rem;">
+        <button type="submit" class="btn btn-primary">Save Employee</button>
+        <a href="{% url 'employee_list' %}" class="btn btn-secondary">Cancel</a>
+    </div>
+</form>
+{% endblock %}

@@ -4,29 +4,52 @@
 {% block title %}{% block dashboard_title %}Dashboard{% endblock %}{% endblock %}
 
 {% block content %}
-    <div class="dashboard-layout">
-        <div class="sidebar">
-            <h2>HR Menu</h2>
-            <ul>
-                <li><a href="{% url 'employee_list' %}" class="{% if request.resolver_match.url_name == 'employee_list' %}active{% endif %}">Manage Employee</a></li>
-                <li><a href="{% url 'attendance_mark' %}" class="{% if request.resolver_match.url_name == 'attendance_mark' %}active{% endif %}">Mark Attendance</a></li>
-                <li><a href="{% url 'attendance_sync' %}" class="{% if request.resolver_match.url_name == 'attendance_sync' %}active{% endif %}">Biometric Sync</a></li>
-                <li><a href="{% url 'summary' %}" class="{% if request.resolver_match.url_name == 'summary' %}active{% endif %}">Summary</a></li>
-                <li><a href="{% url 'department_list' %}" class="{% if request.resolver_match.url_name == 'department_list' %}active{% endif %}">Manage Departments</a></li>
-                <li><a href="{% url 'designation_list' %}" class="{% if request.resolver_match.url_name == 'designation_list' %}active{% endif %}">Manage Designations</a></li>
-                <li><a href="{% url 'allowance_list' %}" class="{% if request.resolver_match.url_name == 'allowance_list' %}active{% endif %}">Manage Allowances</a></li>
+<div class="dashboard-layout">
+    <div class="sidebar">
+        <h2><span style="color: var(--secondary-color);">HR</span> Module</h2>
+        <ul>
+            <li><a href="{% url 'employee_list' %}"
+                    class="{% if request.resolver_match.url_name == 'employee_list' %}active{% endif %}">
+                    <span>👥</span> Manage Employee
+                </a></li>
+            <li><a href="{% url 'attendance_mark' %}"
+                    class="{% if request.resolver_match.url_name == 'attendance_mark' %}active{% endif %}">
+                    <span>📅</span> Mark Attendance
+                </a></li>
+            <li><a href="{% url 'device_list' %}"
+                    class="{% if request.resolver_match.url_name == 'device_list' %}active{% endif %}">
+                    <span>🔄</span> Attendance Devices
+                </a></li>
+            <li><a href="{% url 'summary' %}"
+                    class="{% if request.resolver_match.url_name == 'summary' %}active{% endif %}">
+                    <span>📊</span> Summary
+                </a></li>
+            <li><a href="{% url 'department_list' %}"
+                    class="{% if request.resolver_match.url_name == 'department_list' %}active{% endif %}">
+                    <span>🏢</span> Manage Departments
+                </a></li>
+            <li><a href="{% url 'designation_list' %}"
+                    class="{% if request.resolver_match.url_name == 'designation_list' %}active{% endif %}">
+                    <span>📛</span> Manage Designations
+                </a></li>
+            <li><a href="{% url 'allowance_list' %}"
+                    class="{% if request.resolver_match.url_name == 'allowance_list' %}active{% endif %}">
+                    <span>💰</span> Manage Allowances
+                </a></li>
 
-                <a style="margin: 15px;color: white; margin-top: 30px;" href="{% url 'logout' %}">Logout</a>
-
-        </div>
-        <div class="main-content">
-            <div class="main-content-header">
-                <h1>{% block page_title %}{% endblock %}</h1>
+            <div class="logout-link">
+                <a href="{% url 'logout' %}"><span>🚪</span> Logout</a>
             </div>
-            {% block dashboard_content %}
-                <h1>Welcome to the HR Dashboard!</h1>
-                <p>Use the navigation on the left to manage employees, attendance, and view summaries.</p>
-            {% endblock %}
-        </div>
+
     </div>
+    <div class="main-content">
+        <div class="main-content-header">
+            <h1>{% block page_title %}{% endblock %}</h1>
+        </div>
+        {% block dashboard_content %}
+        <h1>Welcome to the HR Dashboard!</h1>
+        <p>Use the navigation on the left to manage employees, attendance, and view summaries.</p>
+        {% endblock %}
+    </div>
+</div>
 {% endblock %}

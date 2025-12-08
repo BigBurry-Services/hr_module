@@ -1,14 +1,16 @@
 from django import forms
-from .models import Employee, Attendance, Department, Designation, Allowance
+from .models import Employee, Attendance, Department, Designation, Allowance, AttendanceDevice, EmployeeAllowance
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
-
-from django.core.validators import MinLengthValidator
+from django.core.validators import MinLengthValidator, MinValueValidator, RegexValidator
+from django.core.exceptions import ValidationError
+from django.utils import timezone
+import datetime
 
 class RegistrationForm(forms.Form):
     username = forms.CharField(max_length=150)
     email = forms.EmailField()
-    mobile_number = forms.CharField(max_length=15)
+    mobile_number = forms.CharField(max_length=15, validators=[RegexValidator(r'^\d{10,15}$', message="Enter a valid mobile number")])
     password = forms.CharField(widget=forms.PasswordInput, validators=[MinLengthValidator(4)])
     password2 = forms.CharField(widget=forms.PasswordInput, label="Confirm password")
 
@@ -45,11 +47,19 @@ class DesignationForm(forms.ModelForm):
         fields = ['name']
 
 class AllowanceForm(forms.ModelForm):
+    amount = forms.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
+    
     class Meta:
         model = Allowance
         fields = ['name', 'amount']
 
 class EmployeeForm(forms.ModelForm):
+    contact_number = forms.CharField(max_length=15, validators=[RegexValidator(r'^\d{10,15}$', message="Enter a valid contact number (10-15 digits)")])
+    aadhar_number = forms.CharField(max_length=12, validators=[RegexValidator(r'^\d{12}$', message="Aadhar number must be exactly 12 digits")])
+    basic_salary = forms.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
+    da = forms.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
+    hra = forms.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
+
     class Meta:
         model = Employee
         fields = [
@@ -57,13 +67,42 @@ class EmployeeForm(forms.ModelForm):
             'contact_number', 'aadhar_number', 'sex', 'nationality',
             'state', 'joining_date', 'department', 'designation',
             'previous_experience', 'employment_type', 'basic_salary',
-            'da', 'hra', 'allowances'
+            'da', 'hra'
         ]
         widgets = {
             'date_of_birth': forms.DateInput(attrs={'type': 'date'}),
             'joining_date': forms.DateInput(attrs={'type': 'date'}),
-            'allowances': forms.CheckboxSelectMultiple,
+            'joining_date': forms.DateInput(attrs={'type': 'date'}),
         }
+
+    def clean_date_of_birth(self):
+        dob = self.cleaned_data.get('date_of_birth')
+        if dob and dob > datetime.date.today():
+            raise ValidationError("Date of birth cannot be in the future.")
+        return dob
+
+    def clean(self):
+        cleaned_data = super().clean()
+        dob = cleaned_data.get('date_of_birth')
+        joining_date = cleaned_data.get('joining_date')
+
+        if dob and joining_date and joining_date < dob:
+            raise ValidationError("Joining date cannot be before Date of Birth.")
+        return cleaned_data
+
+class EmployeeAllowanceForm(forms.ModelForm):
+    class Meta:
+        model = EmployeeAllowance
+        fields = ['allowance', 'amount']
+
+from django.forms import inlineformset_factory
+EmployeeAllowanceFormSet = inlineformset_factory(
+    Employee, 
+    EmployeeAllowance, 
+    form=EmployeeAllowanceForm,
+    extra=1,
+    can_delete=True
+)
 
 
 class AttendanceForm(forms.ModelForm):
@@ -75,6 +114,26 @@ class AttendanceForm(forms.ModelForm):
             'check_in_time': forms.TimeInput(attrs={'type': 'time'}),
             'check_out_time': forms.TimeInput(attrs={'type': 'time'}),
         }
+    
+    def clean_date(self):
+        date = self.cleaned_data.get('date')
+        if date and date > datetime.date.today():
+            raise ValidationError("Attendance date cannot be in the future.")
+        return date
+
+    def clean(self):
+        cleaned_data = super().clean()
+        check_in = cleaned_data.get("check_in_time")
+        check_out = cleaned_data.get("check_out_time")
+
+        if check_in and check_out and check_out <= check_in:
+            raise ValidationError("Check-out time must be after check-in time.")
+        return cleaned_data
+
+class AttendanceDeviceForm(forms.ModelForm):
+    class Meta:
+        model = AttendanceDevice
+        fields = ['name', 'ip_address', 'port', 'is_active']
 
 class SalarySummaryForm(forms.Form):
     MONTH_CHOICES = [

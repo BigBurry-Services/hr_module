@@ -1,12 +1,15 @@
 from django.shortcuts import render, redirect, get_object_or_404
+from django.http import HttpResponse
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.decorators import login_required
 import datetime
 import calendar
-from .models import Employee, Attendance, HRProfile, Department, Designation, Allowance
+import csv
+from .models import Employee, Attendance, HRProfile, Department, Designation, Allowance, AttendanceDevice, EmployeeAllowance
 from django.contrib.auth.models import User
-from .forms import EmployeeForm, AttendanceForm, SalarySummaryForm, RegistrationForm, DepartmentForm, DesignationForm, AllowanceForm
+from django.db import transaction
+from .forms import EmployeeForm, AttendanceForm, SalarySummaryForm, RegistrationForm, DepartmentForm, DesignationForm, AllowanceForm, AttendanceDeviceForm, EmployeeAllowanceFormSet
 
 @login_required
 def allowance_list(request):
@@ -35,10 +38,27 @@ def allowance_edit(request, pk):
 @login_required
 def allowance_delete(request, pk):
     allowance = get_object_or_404(Allowance, pk=pk)
+    # Check dependencies
+    related_allocations = EmployeeAllowance.objects.filter(allowance=allowance)
+    related_count = related_allocations.count()
+    
     if request.method == 'POST':
+        if related_count > 0:
+             # This should be caught by the template check, but as a fallback
+            return render(request, 'core/allowance_confirm_delete.html', {
+                'allowance': allowance,
+                'related_allocations': related_allocations,
+                'related_count': related_count,
+                'error': "Cannot delete allowance with active assignments."
+            })
         allowance.delete()
         return redirect('allowance_list')
-    return render(request, 'core/allowance_confirm_delete.html', {'allowance': allowance})
+        
+    return render(request, 'core/allowance_confirm_delete.html', {
+        'allowance': allowance,
+        'related_allocations': related_allocations,
+        'related_count': related_count
+    })
 
 @login_required
 def department_list(request):
@@ -67,10 +87,25 @@ def department_edit(request, pk):
 @login_required
 def department_delete(request, pk):
     department = get_object_or_404(Department, pk=pk)
+    # Check dependencies
+    related_employees = Employee.objects.filter(department=department)
+    related_count = related_employees.count()
+
     if request.method == 'POST':
+        if related_count > 0:
+            return render(request, 'core/department_confirm_delete.html', {
+                'department': department,
+                'related_employees': related_employees,
+                'related_count': related_count,
+                'error': "Cannot delete department with assigned employees."
+            })
         department.delete()
         return redirect('department_list')
-    return render(request, 'core/department_confirm_delete.html', {'department': department})
+    return render(request, 'core/department_confirm_delete.html', {
+        'department': department,
+        'related_employees': related_employees,
+        'related_count': related_count
+    })
 
 @login_required
 def designation_list(request):
@@ -99,10 +134,25 @@ def designation_edit(request, pk):
 @login_required
 def designation_delete(request, pk):
     designation = get_object_or_404(Designation, pk=pk)
+    # Check dependencies
+    related_employees = Employee.objects.filter(designation=designation)
+    related_count = related_employees.count()
+
     if request.method == 'POST':
+        if related_count > 0:
+            return render(request, 'core/designation_confirm_delete.html', {
+                'designation': designation,
+                'related_employees': related_employees,
+                'related_count': related_count,
+                'error': "Cannot delete designation with assigned employees."
+            })
         designation.delete()
         return redirect('designation_list')
-    return render(request, 'core/designation_confirm_delete.html', {'designation': designation})
+    return render(request, 'core/designation_confirm_delete.html', {
+        'designation': designation,
+        'related_employees': related_employees,
+        'related_count': related_count
+    })
 
 def dashboard(request):
     return render(request, 'core/dashboard_base.html')
@@ -152,12 +202,21 @@ def employee_list(request):
 def employee_add(request):
     if request.method == 'POST':
         form = EmployeeForm(request.POST)
-        if form.is_valid():
-            form.save()
-            return redirect('employee_list')
+        formset = EmployeeAllowanceFormSet(request.POST)
+        if form.is_valid() and formset.is_valid():
+            try:
+                with transaction.atomic():
+                    employee = form.save()
+                    formset.instance = employee
+                    formset.save()
+                    return redirect('employee_list')
+            except Exception as e:
+                # Handle errors (could add message to user)
+                pass
     else:
         form = EmployeeForm()
-    return render(request, 'core/employee_add.html', {'form': form})
+        formset = EmployeeAllowanceFormSet()
+    return render(request, 'core/employee_form.html', {'form': form, 'formset': formset})
 
 @login_required
 def employee_detail(request, pk):
@@ -169,12 +228,19 @@ def employee_edit(request, pk):
     employee = get_object_or_404(Employee, pk=pk)
     if request.method == 'POST':
         form = EmployeeForm(request.POST, instance=employee)
-        if form.is_valid():
-            form.save()
-            return redirect('employee_list')
+        formset = EmployeeAllowanceFormSet(request.POST, instance=employee)
+        if form.is_valid() and formset.is_valid():
+            try:
+                with transaction.atomic():
+                    form.save()
+                    formset.save()
+                    return redirect('employee_list')
+            except Exception as e:
+                pass
     else:
         form = EmployeeForm(instance=employee)
-    return render(request, 'core/employee_edit.html', {'form': form})
+        formset = EmployeeAllowanceFormSet(instance=employee)
+    return render(request, 'core/employee_form.html', {'form': form, 'formset': formset})
 
 @login_required
 def employee_delete(request, pk):
@@ -186,15 +252,64 @@ def employee_delete(request, pk):
 
 @login_required
 def attendance_mark(request):
+    departments = Department.objects.all()
+    
+    # Filter variables
+    selected_dept_id = request.GET.get('department')
+    selected_date_str = request.GET.get('date', datetime.date.today().strftime('%Y-%m-%d'))
+    try:
+        selected_date = datetime.datetime.strptime(selected_date_str, '%Y-%m-%d').date()
+    except ValueError:
+        selected_date = datetime.date.today()
+
+    # Get Employees based on filter
+    employees = Employee.objects.all()
+    if selected_dept_id:
+        employees = employees.filter(department_id=selected_dept_id)
+
+    # Pre-fetch existing attendance for the selected date to show status
+    # Create a dictionary {employee_id: check_in_time} for easy lookup in template
+    existing_attendance = Attendance.objects.filter(date=selected_date)
+    attendance_map = {att.employee_id: att for att in existing_attendance}
+
     if request.method == 'POST':
-        form = AttendanceForm(request.POST)
-        if form.is_valid():
-            form.save()
-            return redirect('attendance_mark')
-    else:
-        form = AttendanceForm()
-    attendances = Attendance.objects.all().order_by('-date', '-check_in_time')
-    return render(request, 'core/attendance_mark.html', {'form': form, 'attendances': attendances})
+        # Bulk Save
+        employee_ids = request.POST.getlist('employee_ids')
+        check_in = request.POST.get('check_in_time')
+        check_out = request.POST.get('check_out_time')
+        notes = request.POST.get('notes')
+        
+        if not check_in:
+             # Basic validation
+             pass # handle error
+        
+        count = 0
+        for emp_id in employee_ids:
+            # Handle empty check_out string
+            c_out = check_out if check_out else None
+            
+            Attendance.objects.update_or_create(
+                employee_id=emp_id,
+                date=selected_date,
+                defaults={
+                    'check_in_time': check_in,
+                    'check_out_time': c_out,
+                    'notes': notes
+                }
+            )
+            count += 1
+        
+        if count > 0:
+            return redirect(f"{request.path}?department={selected_dept_id or ''}&date={selected_date_str}")
+
+    context = {
+        'departments': departments,
+        'employees': employees,
+        'attendance_map': attendance_map,
+        'selected_dept_id': int(selected_dept_id) if selected_dept_id else None,
+        'selected_date': selected_date_str,
+    }
+    return render(request, 'core/attendance_mark.html', context)
 
 @login_required
 def attendance_edit(request, pk):
@@ -218,26 +333,76 @@ def attendance_delete(request, pk):
 
 @login_required
 def attendance_sync(request):
-    # Placeholder for biometric sync logic
-    # In a real application, this would involve processing data from a biometric device
-    last_sync_time = "2025-12-01 10:00:00" # Example
-    total_synced_logs = 150 # Example
-    errors = [] # Example
+    """
+    Redirects to the device list since management is now handled there.
+    Kept for backward compatibility or future aggregation.
+    """
+    return redirect('device_list')
 
+@login_required
+def device_list(request):
+    devices = AttendanceDevice.objects.all()
     if request.method == 'POST':
-        # Simulate sync operation
-        # In reality, trigger a background task or process file upload
-        last_sync_time = "2025-12-01 11:30:00" # Update after simulated sync
-        total_synced_logs = 160
-        # errors.append("Error: Device A not responding.") # Example error
-        pass
+        form = AttendanceDeviceForm(request.POST)
+        if form.is_valid():
+            form.save()
+            return redirect('device_list')
+    else:
+        form = AttendanceDeviceForm()
+    return render(request, 'core/device_list.html', {'devices': devices, 'form': form})
 
+@login_required
+def device_edit(request, pk):
+    device = get_object_or_404(AttendanceDevice, pk=pk)
+    if request.method == 'POST':
+        form = AttendanceDeviceForm(request.POST, instance=device)
+        if form.is_valid():
+            form.save()
+            return redirect('device_list')
+    else:
+        form = AttendanceDeviceForm(instance=device)
+    return render(request, 'core/device_edit.html', {'form': form})
+
+@login_required
+def device_delete(request, pk):
+    device = get_object_or_404(AttendanceDevice, pk=pk)
+    if request.method == 'POST':
+        device.delete()
+        return redirect('device_list')
+    return render(request, 'core/device_confirm_delete.html', {'device': device})
+
+@login_required
+def device_test_connection(request, pk):
+    device = get_object_or_404(AttendanceDevice, pk=pk)
+    status_msg = ""
+    error_msg = ""
+    
+    try:
+        from zk import ZK
+        zk = ZK(device.ip_address, port=device.port, timeout=5)
+        conn = zk.connect()
+        status_msg = f"Successfully connected to {device.name} ({device.ip_address})!"
+        
+        # Update last activity
+        device.last_activity = datetime.datetime.now()
+        device.save()
+        
+        conn.disconnect()
+    except Exception as e:
+        error_msg = f"Failed to connect: {str(e)}"
+    
+    # Pass context to list view or render a status page
+    # For simplicity, we'll re-render the list with a message
+    devices = AttendanceDevice.objects.all()
+    form = AttendanceDeviceForm()
     context = {
-        'last_sync_time': last_sync_time,
-        'total_synced_logs': total_synced_logs,
-        'errors': errors,
+        'devices': devices,
+        'form': form,
+        'status_msg': status_msg,
+        'error_msg': error_msg
     }
-    return render(request, 'core/attendance_sync.html', context)
+    return render(request, 'core/device_list.html', context)
+
 
 @login_required
 def summary(request):
@@ -247,6 +412,7 @@ def summary(request):
     if request.method == 'POST' and form.is_valid():
         month = int(form.cleaned_data['month'])
         employee = form.cleaned_data['employee']
+        action = request.POST.get('action', 'generate')
         
         # Get the current year
         current_year = datetime.date.today().year
@@ -276,8 +442,104 @@ def summary(request):
             'total_absent_days': absent_days,
         }
 
+        if action == 'download_pdf':
+            response = HttpResponse(content_type='application/pdf')
+            response['Content-Disposition'] = f'attachment; filename="salary_slip_{employee.full_name}_{start_date.strftime("%B_%Y")}.pdf"'
+            
+            from reportlab.lib.pagesizes import letter
+            from reportlab.pdfgen import canvas
+
+            p = canvas.Canvas(response, pagesize=letter)
+            p.setFont("Helvetica-Bold", 16)
+            p.drawString(100, 750, f"Salary Slip - {summary_data['month']}")
+            
+            p.setFont("Helvetica", 12)
+            p.drawString(100, 720, f"Employee Name: {summary_data['employee_name']}")
+            p.drawString(100, 700, f"Total Working Days: {summary_data['total_working_days']}")
+            p.drawString(100, 680, f"Present Days: {summary_data['total_present_days']}")
+            p.drawString(100, 660, f"Absent Days: {summary_data['total_absent_days']}")
+            
+            # Salary Calculation
+            daily_wage = 0
+            if employee and employee.basic_salary:
+                daily_wage = employee.basic_salary / 30 # Assuming 30 days
+            
+            salary_payable = daily_wage * present_days
+            
+            # Add Allowances
+            total_allowances = 0
+            if employee:
+                # Iterate over the through-model to get specific amounts
+                for emp_allowance in employee.employeeallowance_set.all():
+                    total_allowances += emp_allowance.amount
+            
+            salary_payable += total_allowances
+            
+            p.drawString(100, 640, f"Total Allowances: {total_allowances:.2f}")
+            p.drawString(100, 620, f"Estimated Salary Payable: {salary_payable:.2f}")
+
+            p.showPage()
+            p.save()
+            return response
+
     context = {
         'form': form,
         'summary_data': summary_data,
     }
     return render(request, 'core/summary.html', context)
+
+@login_required
+def export_employees_csv(request):
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="employees.csv"'
+
+    writer = csv.writer(response)
+    writer.writerow(['Employee Code', 'Full Name', 'Department', 'Designation', 'Joining Date', 'Mobile'])
+
+    employees = Employee.objects.all()
+    for emp in employees:
+        writer.writerow([
+            emp.employee_code,
+            emp.full_name,
+            emp.department.name if emp.department else 'N/A',
+            emp.designation.name if emp.designation else 'N/A',
+            emp.joining_date,
+            emp.contact_number,
+        ])
+
+    return response
+
+@login_required
+def export_attendance_csv(request):
+    selected_dept_id = request.GET.get('department')
+    selected_date_str = request.GET.get('date', datetime.date.today().strftime('%Y-%m-%d'))
+    
+    try:
+        selected_date = datetime.datetime.strptime(selected_date_str, '%Y-%m-%d').date()
+    except ValueError:
+        selected_date = datetime.date.today()
+
+    response = HttpResponse(content_type='text/csv')
+    filename = f"attendance_{selected_date}_{selected_dept_id or 'all'}.csv"
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+    writer = csv.writer(response)
+    writer.writerow(['Date', 'Employee Code', 'Employee Name', 'Department', 'Check In', 'Check Out', 'Notes'])
+
+    # Filter Attendance
+    attendance_records = Attendance.objects.filter(date=selected_date)
+    if selected_dept_id:
+        attendance_records = attendance_records.filter(employee__department_id=selected_dept_id)
+        
+    for att in attendance_records:
+        writer.writerow([
+            att.date,
+            att.employee.employee_code,
+            att.employee.full_name,
+            att.employee.department.name if att.employee.department else 'N/A',
+            att.check_in_time,
+            att.check_out_time,
+            att.notes
+        ])
+
+    return response

@@ -6,23 +6,28 @@
 {% block page_title %}Salary Summary{% endblock %}
 
 {% block dashboard_content %}
-    <form method="post" class="card">
-        {% csrf_token %}
-        {{ form.as_p }}
-        <div class="form-actions">
-            <button type="submit" class="btn">Generate Summary</button>
-        </div>
-    </form>
+<form method="post" class="card">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <div class="form-actions">
+        {% if summary_data %}
+        <button type="submit" name="action" value="generate" class="btn btn-primary">Update View</button>
+        <button type="submit" name="action" value="download_pdf" class="btn btn-secondary">Download PDF</button>
+        {% else %}
+        <button type="submit" name="action" value="generate" class="btn btn-primary">Generate Summary</button>
+        {% endif %}
+    </div>
+</form>
 
-    {% if summary_data %}
-        <hr>
-        <div class="card mt-3">
-            <h2>Results for {{ summary_data.employee_name }} ({{ summary_data.month }})</h2>
-            <p><strong>Total Working Days:</strong> {{ summary_data.total_working_days }}</p>
-            <p><strong>Total Present Days:</strong> {{ summary_data.total_present_days }}</p>
-            <p><strong>Total Absent Days:</strong> {{ summary_data.total_absent_days }}</p>
-        </div>
-    {% elif form.is_bound %}
-        <p class="text-info mt-3">No attendance data found for the selected criteria.</p>
-    {% endif %}
+{% if summary_data %}
+<hr>
+<div class="card mt-3">
+    <h2>Results for {{ summary_data.employee_name }} ({{ summary_data.month }})</h2>
+    <p><strong>Total Working Days:</strong> {{ summary_data.total_working_days }}</p>
+    <p><strong>Total Present Days:</strong> {{ summary_data.total_present_days }}</p>
+    <p><strong>Total Absent Days:</strong> {{ summary_data.total_absent_days }}</p>
+</div>
+{% elif form.is_bound %}
+<p class="text-info mt-3">No attendance data found for the selected criteria.</p>
+{% endif %}
 {% endblock %}

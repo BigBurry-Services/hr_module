@@ -1,49 +1,101 @@
 {% extends 'core/dashboard_base.html' %}
 {% load static %}
-
-{% block dashboard_title %}Mark Attendance{% endblock %}
+{% load core_extras %}
 
 {% block page_title %}Mark Attendance{% endblock %}
 
 {% block dashboard_content %}
-    <form method="post" class="card">
-        {% csrf_token %}
-        {{ form.as_p }}
-        <div class="form-actions">
-            <button type="submit" class="btn">Add Attendance</button>
+
+<div class="card" style="margin-bottom: 2rem;">
+    <form method="get" style="display: flex; gap: 1rem; align-items: flex-end;">
+        <div style="flex: 1;">
+            <label for="date">Date</label>
+            <input type="date" name="date" id="date" value="{{ selected_date }}" required>
+        </div>
+        <div style="flex: 1;">
+            <label for="department">Department</label>
+            <select name="department" id="department">
+                <option value="">All Departments</option>
+                {% for dept in departments %}
+                {# Uses custom filter to avoid formatter stripping spaces in equality check #}
+                <option value="{{ dept.id }}" {% if dept.id|matches:selected_dept_id %}selected{% endif %}>
+                    {{ dept.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div style="display: flex; gap: 0.5rem;">
+            <button type="submit" class="btn btn-secondary">Filter</button>
+            <button type="submit" formaction="{% url 'export_attendance_csv' %}"
+                class="btn btn-outline-secondary">Export CSV</button>
         </div>
     </form>
-    <hr>
-    <h2>Attendance Records</h2>
+</div>
+
+<form method="post" class="card">
+    {% csrf_token %}
+
+    <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+        <div style="flex: 1; min-width: 150px;">
+            <label for="check_in_time">Check-in Time *</label>
+            <input type="time" name="check_in_time" id="check_in_time" required>
+        </div>
+        <div style="flex: 1; min-width: 150px;">
+            <label for="check_out_time">Check-out Time</label>
+            <input type="time" name="check_out_time" id="check_out_time">
+        </div>
+        <div style="flex: 2; min-width: 300px;">
+            <label for="notes">Notes</label>
+            <input type="text" name="notes" id="notes" placeholder="e.g., On Time">
+        </div>
+        <div style="display: flex; align-items: flex-end;">
+            <button type="submit" class="btn btn-primary">Mark Selected</button>
+        </div>
+    </div>
+
     <table class="data-table">
         <thead>
             <tr>
-                <th>Employee</th>
-                <th>Date</th>
-                <th>Check-in</th>
-                <th>Check-out</th>
-                <th>Notes</th>
-                <th>Actions</th>
+                <th style="width: 40px;"><input type="checkbox" id="select-all"></th>
+                <th>Employee Name</th>
+                <th>Department</th>
+                <th>Status ({{ selected_date }})</th>
             </tr>
         </thead>
         <tbody>
-            {% for attendance in attendances %}
-            <tr>
-                <td>{{ attendance.employee.full_name }}</td>
-                <td>{{ attendance.date }}</td>
-                <td>{{ attendance.check_in_time }}</td>
-                <td>{{ attendance.check_out_time|default:"-" }}</td>
-                <td>{{ attendance.notes|default:"-" }}</td>
-                <td class="actions">
-                    <a href="{% url 'attendance_edit' attendance.id %}">Edit</a>
-                    <a href="{% url 'attendance_delete' attendance.id %}">Delete</a>
+            {% for employee in employees %}
+            {% with attendance=attendance_map|get_item:employee.id %}
+            <tr {% if attendance %}style="background-color: rgba(72, 187, 120, 0.1);" {% endif %}>
+                <td>
+                    <input type="checkbox" name="employee_ids" value="{{ employee.id }}" class="emp-checkbox">
+                </td>
+                <td>{{ employee.full_name }}</td>
+                <td>{{ employee.department.name|default:"-" }}</td>
+                <td>
+                    {% if attendance %}
+                    <span class="badge"
+                        style="background-color: #48bb78; color: white; padding: 2px 6px; border-radius: 4px;">
+                        Present ({{ attendance.check_in_time|time:"H:i" }})
+                    </span>
+                    {% else %}
+                    <span class="text-secondary">-</span>
+                    {% endif %}
                 </td>
             </tr>
+            {% endwith %}
             {% empty %}
             <tr>
-                <td colspan="6">No attendance records found.</td>
+                <td colspan="4">No employees found.</td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
+</form>
+
+<script>
+    document.getElementById('select-all').addEventListener('change', function () {
+        const checkboxes = document.querySelectorAll('.emp-checkbox');
+        checkboxes.forEach(cb => cb.checked = this.checked);
+    });
+</script>
 {% endblock %}

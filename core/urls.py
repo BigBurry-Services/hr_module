@@ -32,7 +32,17 @@ urlpatterns = [
     path('attendance/mark/', views.attendance_mark, name='attendance_mark'),
     path('attendance/<int:pk>/edit/', views.attendance_edit, name='attendance_edit'),
     path('attendance/<int:pk>/delete/', views.attendance_delete, name='attendance_delete'),
-    path('attendance/sync/', views.attendance_sync, name='attendance_sync'),
+    
+    # Device Management URLs (Replaces old sync)
+    path('devices/', views.device_list, name='device_list'),
+    path('devices/<int:pk>/edit/', views.device_edit, name='device_edit'),
+    path('devices/<int:pk>/delete/', views.device_delete, name='device_delete'),
+    path('devices/<int:pk>/test/', views.device_test_connection, name='device_test_connection'),
+    path('attendance/sync/', views.attendance_sync, name='attendance_sync'), # Redirects to device_list
+
+    # Export URLs
+    path('employees/export/', views.export_employees_csv, name='export_employees_csv'),
+    path('attendance/export/', views.export_attendance_csv, name='export_attendance_csv'),
 
     # Summary URL
     path('summary/', views.summary, name='summary'),

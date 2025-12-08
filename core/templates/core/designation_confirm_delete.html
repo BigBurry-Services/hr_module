@@ -6,12 +6,18 @@
 {% block page_title %}Confirm Delete Designation{% endblock %}
 
 {% block dashboard_content %}
-    <p>Are you sure you want to delete designation: <strong>{{ designation.name }}</strong>?</p>
-    <form method="post" class="card">
-        {% csrf_token %}
-        <div class="form-actions">
-            <button type="submit" class="btn btn-danger">Yes, Delete</button>
-            <a href="{% url 'designation_list' %}" class="btn btn-secondary">Cancel</a>
-        </div>
-    </form>
+
+{% include "core/dependency_warning.html" with related_count=related_count related_objects=related_employees
+go_back_url=request.META.HTTP_REFERER|default:"/core/designation/" %}
+
+{% if related_count == 0 %}
+<p>Are you sure you want to delete designation: <strong>{{ designation.name }}</strong>?</p>
+<form method="post" class="card">
+    {% csrf_token %}
+    <div class="form-actions">
+        <button type="submit" class="btn btn-danger">Yes, Delete</button>
+        <a href="{% url 'designation_list' %}" class="btn btn-secondary">Cancel</a>
+    </div>
+</form>
+{% endif %}
 {% endblock %}

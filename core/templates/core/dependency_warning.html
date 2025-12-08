@@ -1,0 +1,18 @@
+{% if related_count > 0 %}
+<div class="card" style="background-color: #fee2e2; border-color: #ef4444; margin-bottom: 20px;">
+    <h3 class="text-danger" style="margin-top: 0;">Cannot Delete Item</h3>
+    <p>This item is currently assigned to <strong>{{ related_count }}</strong> employees. You must reassign or remove
+        them before deleting this item.</p>
+
+    <p><strong>Affected Employees:</strong></p>
+    <ul style="max-height: 200px; overflow-y: auto;">
+        {% for obj in related_objects %}
+        <li>{{ obj }}</li>
+        {% endfor %}
+    </ul>
+
+    <div class="form-actions">
+        <a href="{{ go_back_url }}" class="btn btn-secondary">Go Back</a>
+    </div>
+</div>
+{% endif %}

@@ -1,0 +1,84 @@
+{% extends 'core/dashboard_base.html' %}
+{% load static %}
+
+{% block dashboard_title %}Device Management{% endblock %}
+
+{% block page_title %}Attendance Devices{% endblock %}
+
+{% block dashboard_content %}
+<form method="post" class="card">
+    {% csrf_token %}
+    <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+        {% for field in form %}
+        <div style="flex: 1; min-width: 200px;">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.errors %}
+            <ul class="errorlist">
+                {% for error in field.errors %}
+                <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Add Device</button>
+    </div>
+</form>
+
+{% if status_msg %}
+<div class="card" style="background-color: #d1fae5; border-color: #10b981;">
+    <p class="text-success" style="margin: 0; font-weight: 600;">{{ status_msg }}</p>
+</div>
+{% endif %}
+
+{% if error_msg %}
+<div class="card" style="background-color: #fee2e2; border-color: #ef4444;">
+    <p class="text-danger" style="margin: 0; font-weight: 600;">{{ error_msg }}</p>
+</div>
+{% endif %}
+
+<hr>
+<h2>Registered Devices</h2>
+<table class="data-table">
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>IP Address</th>
+            <th>Port</th>
+            <th>Last Activity</th>
+            <th>Status</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for device in devices %}
+        <tr>
+            <td>{{ device.name }}</td>
+            <td>{{ device.ip_address }}</td>
+            <td>{{ device.port }}</td>
+            <td>{{ device.last_activity|default:"Never" }}</td>
+            <td>
+                {% if device.is_active %}
+                <span class="text-success">Active</span>
+                {% else %}
+                <span class="text-danger">Inactive</span>
+                {% endif %}
+            </td>
+            <td class="actions">
+                <a href="{% url 'device_test_connection' device.id %}" class="btn btn-secondary btn-sm">Test
+                    Connection</a>
+                <a href="{% url 'device_edit' device.id %}" class="btn btn-secondary btn-sm">Edit</a>
+                <a href="{% url 'device_delete' device.id %}" class="btn btn-danger btn-sm">Delete</a>
+            </td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="6">No devices registered.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

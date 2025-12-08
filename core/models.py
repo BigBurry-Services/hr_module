@@ -24,7 +24,7 @@ class Designation(models.Model):
 
 class Allowance(models.Model):
     name = models.CharField(max_length=100, unique=True)
-    amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    # amount field removed as per user request, specific amount is now in EmployeeAllowance
 
     def __str__(self):
         return self.name
@@ -63,7 +63,18 @@ class Employee(models.Model):
     basic_salary = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     da = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     hra = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
-    allowances = models.ManyToManyField(Allowance, blank=True)
+    allowances = models.ManyToManyField(Allowance, through='EmployeeAllowance', blank=True)
+
+class EmployeeAllowance(models.Model):
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
+    allowance = models.ForeignKey(Allowance, on_delete=models.CASCADE)
+    amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+
+    class Meta:
+        unique_together = ('employee', 'allowance')
+    
+    def __str__(self):
+        return f"{self.employee.full_name} - {self.allowance.name}: {self.amount}"
 
     def __str__(self):
         return self.full_name
@@ -77,3 +88,13 @@ class Attendance(models.Model):
 
     def __str__(self):
         return f"{self.employee.full_name} - {self.date}"
+
+class AttendanceDevice(models.Model):
+    name = models.CharField(max_length=100, help_text="Friendly name for the device, e.g., 'Main Entrance'")
+    ip_address = models.GenericIPAddressField(protocol='IPv4')
+    port = models.IntegerField(default=4370)
+    last_activity = models.DateTimeField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.ip_address})"

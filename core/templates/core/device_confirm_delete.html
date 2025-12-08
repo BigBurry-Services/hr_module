@@ -1,0 +1,21 @@
+{% extends 'core/dashboard_base.html' %}
+{% load static %}
+
+{% block dashboard_title %}Delete Device{% endblock %}
+
+{% block page_title %}Delete Device{% endblock %}
+
+{% block dashboard_content %}
+<div class="card">
+    <p>Are you sure you want to delete the device "<strong>{{ device.name }}</strong>"?</p>
+    <p class="text-danger">This action cannot be undone.</p>
+
+    <form method="post">
+        {% csrf_token %}
+        <div class="form-actions">
+            <button type="submit" class="btn btn-danger">Confirm Delete</button>
+            <a href="{% url 'device_list' %}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
