@@ -30,15 +30,25 @@ body {
     overflow-x: hidden;
 }
 
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
     color: var(--text-color);
     margin-bottom: 1rem;
     font-weight: 700;
     letter-spacing: -0.025em;
 }
 
-h1 { font-size: 2.25rem; }
-h2 { font-size: 1.875rem; }
+h1 {
+    font-size: 2.25rem;
+}
+
+h2 {
+    font-size: 1.875rem;
+}
 
 a {
     color: var(--primary-color);
@@ -51,7 +61,8 @@ a:hover {
 }
 
 /* Glassmorphism Card */
-.card, .form-container {
+.card,
+.form-container {
     background: var(--glass-bg);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
@@ -78,13 +89,15 @@ a:hover {
     text-transform: capitalize;
 }
 
-.btn-primary, input[type="submit"] {
+.btn-primary,
+input[type="submit"] {
     background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
     color: var(--white);
     box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.3);
 }
 
-.btn-primary:hover, input[type="submit"]:hover {
+.btn-primary:hover,
+input[type="submit"]:hover {
     transform: translateY(-2px);
     box-shadow: 0 6px 8px -1px rgba(79, 70, 229, 0.4);
 }
@@ -140,11 +153,22 @@ textarea {
     margin-bottom: 1.25rem;
 }
 
-input:focus, select:focus, textarea:focus {
+input:focus,
+select:focus,
+textarea:focus {
     outline: none;
     border-color: var(--primary-color);
     box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
     background-color: var(--white);
+}
+
+/* Login/Register Container */
+.register-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 1rem;
 }
 
 /* Dashboard Layout */
@@ -172,7 +196,7 @@ input:focus, select:focus, textarea:focus {
     text-align: center;
     margin-bottom: 2.5rem;
     padding-bottom: 1rem;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .sidebar ul {
@@ -196,7 +220,8 @@ input:focus, select:focus, textarea:focus {
     font-weight: 500;
 }
 
-.sidebar a:hover, .sidebar a.active {
+.sidebar a:hover,
+.sidebar a.active {
     background-color: var(--primary-color);
     color: var(--white);
 }
@@ -243,7 +268,8 @@ input:focus, select:focus, textarea:focus {
     margin-top: 1.5rem;
 }
 
-.data-table th, .data-table td {
+.data-table th,
+.data-table td {
     padding: 1rem 1.5rem;
     text-align: left;
     border-bottom: 1px solid #f3f4f6;
