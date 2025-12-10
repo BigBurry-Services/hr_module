@@ -11,6 +11,30 @@
     <a href="{% url 'employee_add' %}" class="btn btn-primary"><span>+</span> Add New Employee</a>
 </div>
 
+<!-- Search Bar -->
+<div class="card" style="margin-bottom: 1.5rem;">
+    <form method="get" style="display: flex; gap: 1rem; align-items: center;">
+        <div style="flex: 1;">
+            <input type="text" name="search" id="search"
+                placeholder="Search by name, code, department, or designation..." value="{{ search_query }}"
+                style="width: 100%;">
+        </div>
+        <div style="display: flex; gap: 0.5rem;">
+            <button type="submit" class="btn btn-primary">Search</button>
+            {% if search_query %}
+            <a href="{% url 'employee_list' %}" class="btn btn-secondary">Clear</a>
+            {% endif %}
+        </div>
+    </form>
+</div>
+
+{% if search_query %}
+<p style="margin-bottom: 1rem; color: #666;">
+    <strong>{{ employees|length }}</strong> result(s) found for "<strong>{{ search_query }}</strong>"
+</p>
+{% endif %}
+
+
 <table class="data-table">
     <thead>
         <tr>

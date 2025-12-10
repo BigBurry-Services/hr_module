@@ -32,24 +32,34 @@
     </form>
 </div>
 
+<!-- Success/Error Messages -->
+{% if success_message %}
+<div class="alert alert-success" style="margin-bottom: 1rem;">
+    {{ success_message }}
+</div>
+{% endif %}
+
+{% if error_message %}
+<div class="alert alert-danger" style="margin-bottom: 1rem;">
+    {{ error_message }}
+</div>
+{% endif %}
+
 <form method="post" class="card">
     {% csrf_token %}
 
-    <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+    <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; align-items: flex-end;">
         <div style="flex: 1; min-width: 150px;">
-            <label for="check_in_time">Check-in Time *</label>
-            <input type="time" name="check_in_time" id="check_in_time" required>
+            <label for="time">Time *</label>
+            <input type="time" name="time" id="time" required>
         </div>
-        <div style="flex: 1; min-width: 150px;">
-            <label for="check_out_time">Check-out Time</label>
-            <input type="time" name="check_out_time" id="check_out_time">
-        </div>
-        <div style="flex: 2; min-width: 300px;">
+        <div style="flex: 2; min-width: 200px;">
             <label for="notes">Notes</label>
-            <input type="text" name="notes" id="notes" placeholder="e.g., On Time">
+            <input type="text" name="notes" id="notes" placeholder="Optional notes">
         </div>
-        <div style="display: flex; align-items: flex-end;">
-            <button type="submit" class="btn btn-primary">Mark Selected</button>
+        <div style="display: flex; gap: 0.5rem;">
+            <button type="submit" name="action" value="check_in" class="btn btn-success">Check In Selected</button>
+            <button type="submit" name="action" value="check_out" class="btn btn-warning">Check Out Selected</button>
         </div>
     </div>
 
@@ -73,10 +83,17 @@
                 <td>{{ employee.department.name|default:"-" }}</td>
                 <td>
                     {% if attendance %}
+                    {% if attendance.check_out_time %}
                     <span class="badge"
-                        style="background-color: #48bb78; color: white; padding: 2px 6px; border-radius: 4px;">
-                        Present ({{ attendance.check_in_time|time:"H:i" }})
+                        style="background-color: #48bb78; color: white; padding: 4px 8px; border-radius: 4px;">
+                        In: {{ attendance.check_in_time|time:"H:i" }} | Out: {{ attendance.check_out_time|time:"H:i" }}
                     </span>
+                    {% else %}
+                    <span class="badge"
+                        style="background-color: #ed8936; color: white; padding: 4px 8px; border-radius: 4px;">
+                        In: {{ attendance.check_in_time|time:"H:i" }} (Not checked out)
+                    </span>
+                    {% endif %}
                     {% else %}
                     <span class="text-secondary">-</span>
                     {% endif %}

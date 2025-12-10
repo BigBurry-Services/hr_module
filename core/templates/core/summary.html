@@ -22,10 +22,97 @@
 {% if summary_data %}
 <hr>
 <div class="card mt-3">
-    <h2>Results for {{ summary_data.employee_name }} ({{ summary_data.month }})</h2>
-    <p><strong>Total Working Days:</strong> {{ summary_data.total_working_days }}</p>
-    <p><strong>Total Present Days:</strong> {{ summary_data.total_present_days }}</p>
-    <p><strong>Total Absent Days:</strong> {{ summary_data.total_absent_days }}</p>
+    <div class="card-header">
+        <h2>Salary Summary for {{ summary_data.employee_name }} - {{ summary_data.month }}</h2>
+    </div>
+    <div class="card-body">
+
+        <!-- Employee Salary Components -->
+        <h3>Salary Components</h3>
+        <table class="table table-bordered">
+            <thead class="table-light">
+                <tr>
+                    <th>Component</th>
+                    <th>Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Basic Salary (Monthly)</strong></td>
+                    <td>{{ summary_data.basic_salary }}</td>
+                </tr>
+                <tr>
+                    <td><strong>Dearness Allowance (DA)</strong></td>
+                    <td>{{ summary_data.da }}</td>
+                </tr>
+                <tr>
+                    <td><strong>House Rent Allowance (HRA)</strong></td>
+                    <td>{{ summary_data.hra }}</td>
+                </tr>
+                {% for allowance in summary_data.allowance_list %}
+                <tr>
+                    <td>{{ allowance.name }}</td>
+                    <td>{{ allowance.amount }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <!-- Attendance Summary -->
+        <h3 class="mt-4">Attendance Summary</h3>
+        <table class="table table-bordered">
+            <thead class="table-light">
+                <tr>
+                    <th>Metric</th>
+                    <th>Days</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Total Working Days</strong></td>
+                    <td>{{ summary_data.total_working_days }}</td>
+                </tr>
+                <tr>
+                    <td><strong>Total Present Days</strong></td>
+                    <td>{{ summary_data.total_present_days }}</td>
+                </tr>
+                <tr>
+                    <td><strong>Total Absent Days</strong></td>
+                    <td>{{ summary_data.total_absent_days }}</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- Detailed Attendance Records -->
+        <h3 class="mt-4">Attendance Records</h3>
+        <div class="table-responsive">
+            <table class="table table-striped table-bordered">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Date</th>
+                        <th>Check In</th>
+                        <th>Check Out</th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for att in summary_data.attendance_list %}
+                    <tr>
+                        <td>{{ att.date }}</td>
+                        <td>{{ att.check_in_time }}</td>
+                        <td>{{ att.check_out_time|default:"-" }}</td>
+                        <td>{{ att.notes|default:"-" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center">No attendance records found for this period.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+    </div>
 </div>
 {% elif form.is_bound %}
 <p class="text-info mt-3">No attendance data found for the selected criteria.</p>

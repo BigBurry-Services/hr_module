@@ -64,6 +64,9 @@ class Employee(models.Model):
     da = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     hra = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     allowances = models.ManyToManyField(Allowance, through='EmployeeAllowance', blank=True)
+    def __str__(self):
+        return f"{self.full_name} ({self.employee_code})"
+
 
 class EmployeeAllowance(models.Model):
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
@@ -76,8 +79,7 @@ class EmployeeAllowance(models.Model):
     def __str__(self):
         return f"{self.employee.full_name} - {self.allowance.name}: {self.amount}"
 
-    def __str__(self):
-        return self.full_name
+
 
 class Attendance(models.Model):
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE)

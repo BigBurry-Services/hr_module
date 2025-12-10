@@ -196,7 +196,22 @@ def logout_view(request):
 @login_required
 def employee_list(request):
     employees = Employee.objects.all()
-    return render(request, 'core/employee_list.html', {'employees': employees})
+    
+    # Search functionality
+    search_query = request.GET.get('search', '')
+    if search_query:
+        from django.db.models import Q
+        employees = employees.filter(
+            Q(full_name__icontains=search_query) |
+            Q(employee_code__icontains=search_query) |
+            Q(department__name__icontains=search_query) |
+            Q(designation__name__icontains=search_query)
+        )
+    
+    return render(request, 'core/employee_list.html', {
+        'employees': employees,
+        'search_query': search_query
+    })
 
 @login_required
 def employee_add(request):
@@ -268,39 +283,64 @@ def attendance_mark(request):
         employees = employees.filter(department_id=selected_dept_id)
 
     # Pre-fetch existing attendance for the selected date to show status
-    # Create a dictionary {employee_id: check_in_time} for easy lookup in template
     existing_attendance = Attendance.objects.filter(date=selected_date)
     attendance_map = {att.employee_id: att for att in existing_attendance}
 
+    error_message = None
+    success_message = None
+
     if request.method == 'POST':
-        # Bulk Save
+        action = request.POST.get('action')  # 'check_in' or 'check_out'
         employee_ids = request.POST.getlist('employee_ids')
-        check_in = request.POST.get('check_in_time')
-        check_out = request.POST.get('check_out_time')
-        notes = request.POST.get('notes')
+        time_value = request.POST.get('time')
+        notes = request.POST.get('notes', '')
         
-        if not check_in:
-             # Basic validation
-             pass # handle error
-        
-        count = 0
-        for emp_id in employee_ids:
-            # Handle empty check_out string
-            c_out = check_out if check_out else None
+        if not employee_ids:
+            error_message = "Please select at least one employee."
+        elif not time_value:
+            error_message = "Please enter a time."
+        elif action == 'check_in':
+            # Check-in: Create or update attendance with check_in_time
+            count = 0
+            for emp_id in employee_ids:
+                Attendance.objects.update_or_create(
+                    employee_id=emp_id,
+                    date=selected_date,
+                    defaults={
+                        'check_in_time': time_value,
+                        'notes': notes
+                    }
+                )
+                count += 1
+            success_message = f"Successfully checked in {count} employee(s)."
             
-            Attendance.objects.update_or_create(
-                employee_id=emp_id,
-                date=selected_date,
-                defaults={
-                    'check_in_time': check_in,
-                    'check_out_time': c_out,
-                    'notes': notes
-                }
-            )
-            count += 1
+        elif action == 'check_out':
+            # Check-out: Validate that employee has checked in, then update check_out_time
+            count = 0
+            not_checked_in = []
+            
+            for emp_id in employee_ids:
+                try:
+                    attendance = Attendance.objects.get(employee_id=emp_id, date=selected_date)
+                    # Employee has checked in, update check_out_time
+                    attendance.check_out_time = time_value
+                    if notes:
+                        attendance.notes = notes
+                    attendance.save()
+                    count += 1
+                except Attendance.DoesNotExist:
+                    # Employee hasn't checked in yet
+                    emp = Employee.objects.get(id=emp_id)
+                    not_checked_in.append(emp.full_name)
+            
+            if not_checked_in:
+                error_message = f"Cannot check out - not checked in: {', '.join(not_checked_in)}"
+            else:
+                success_message = f"Successfully checked out {count} employee(s)."
         
-        if count > 0:
-            return redirect(f"{request.path}?department={selected_dept_id or ''}&date={selected_date_str}")
+        # Refresh attendance map after changes
+        existing_attendance = Attendance.objects.filter(date=selected_date)
+        attendance_map = {att.employee_id: att for att in existing_attendance}
 
     context = {
         'departments': departments,
@@ -308,6 +348,8 @@ def attendance_mark(request):
         'attendance_map': attendance_map,
         'selected_dept_id': int(selected_dept_id) if selected_dept_id else None,
         'selected_date': selected_date_str,
+        'error_message': error_message,
+        'success_message': success_message,
     }
     return render(request, 'core/attendance_mark.html', context)
 
@@ -442,6 +484,47 @@ def summary(request):
             'total_absent_days': absent_days,
         }
 
+        # Salary Calculation
+        daily_wage = 0
+        basic_salary = 0
+        da = 0
+        hra = 0
+        if employee:
+            basic_salary = employee.basic_salary
+            da = employee.da
+            hra = employee.hra
+            daily_wage = basic_salary / 30 # Assuming 30 days
+        
+        salary_from_days = daily_wage * present_days
+        
+        # Add Allowances
+        total_allowances = 0
+        allowance_list = []
+        if employee:
+            # Iterate over the through-model to get specific amounts
+            # Use select_related to avoid N+1 queries
+            emp_allowances = employee.employeeallowance_set.select_related('allowance').all()
+            for emp_allowance in emp_allowances:
+                amount = emp_allowance.amount
+                total_allowances += amount
+                allowance_list.append({
+                    'name': emp_allowance.allowance.name,
+                    'amount': amount
+                })
+        
+        salary_payable = salary_from_days + total_allowances + da + hra
+
+        summary_data.update({
+             'basic_salary': basic_salary,
+             'da': da,
+             'hra': hra,
+             'total_allowances': total_allowances,
+             'allowance_list': allowance_list,
+             'salary_payable': salary_payable,
+             'daily_wage': daily_wage,
+             'attendance_list': attendance_records.order_by('date')
+        })
+
         if action == 'download_pdf':
             response = HttpResponse(content_type='application/pdf')
             response['Content-Disposition'] = f'attachment; filename="salary_slip_{employee.full_name}_{start_date.strftime("%B_%Y")}.pdf"'
@@ -459,24 +542,14 @@ def summary(request):
             p.drawString(100, 680, f"Present Days: {summary_data['total_present_days']}")
             p.drawString(100, 660, f"Absent Days: {summary_data['total_absent_days']}")
             
-            # Salary Calculation
-            daily_wage = 0
-            if employee and employee.basic_salary:
-                daily_wage = employee.basic_salary / 30 # Assuming 30 days
+            p.drawString(100, 630, "Earnings:")
+            p.drawString(120, 610, f"Basic Salary (Pro-rated): {salary_from_days:.2f} (Full: {basic_salary})")
+            p.drawString(120, 590, f"DA: {da}")
+            p.drawString(120, 570, f"HRA: {hra}")
+            p.drawString(120, 550, f"Total Allowances: {total_allowances:.2f}")
             
-            salary_payable = daily_wage * present_days
-            
-            # Add Allowances
-            total_allowances = 0
-            if employee:
-                # Iterate over the through-model to get specific amounts
-                for emp_allowance in employee.employeeallowance_set.all():
-                    total_allowances += emp_allowance.amount
-            
-            salary_payable += total_allowances
-            
-            p.drawString(100, 640, f"Total Allowances: {total_allowances:.2f}")
-            p.drawString(100, 620, f"Estimated Salary Payable: {salary_payable:.2f}")
+            p.setFont("Helvetica-Bold", 12)
+            p.drawString(100, 520, f"Net Salary Payable: {salary_payable:.2f}")
 
             p.showPage()
             p.save()
