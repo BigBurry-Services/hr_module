@@ -39,6 +39,7 @@ urlpatterns = [
     path('devices/<int:pk>/delete/', views.device_delete, name='device_delete'),
     path('devices/<int:pk>/test/', views.device_test_connection, name='device_test_connection'),
     path('attendance/sync/', views.attendance_sync, name='attendance_sync'), # Redirects to device_list
+    path('attendance/sync-devices/', views.sync_attendance_view, name='sync_attendance_from_devices'),
 
     # Export URLs
     path('employees/export/', views.export_employees_csv, name='export_employees_csv'),

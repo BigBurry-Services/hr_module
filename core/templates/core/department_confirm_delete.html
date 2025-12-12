@@ -7,17 +7,31 @@
 
 {% block dashboard_content %}
 
-{% include "core/dependency_warning.html" with related_count=related_count related_objects=related_employees
-go_back_url=request.META.HTTP_REFERER|default:"/core/department/" %}
+<div class="card">
+    {% if related_count > 0 %}
+    <div class="alert alert-warning">
+        <h4 class="text-warning" style="margin-top: 0;">⚠️ Warning</h4>
+        <p>This department is currently assigned to <strong>{{ related_count }}</strong> employees.</p>
+        <p>If you delete this department, these employees will be updated to have <strong>No Department</strong>.</p>
 
-{% if related_count == 0 %}
-<p>Are you sure you want to delete department: <strong>{{ department.name }}</strong>?</p>
-<form method="post" class="card">
-    {% csrf_token %}
-    <div class="form-actions">
-        <button type="submit" class="btn btn-danger">Yes, Delete</button>
-        <a href="{% url 'department_list' %}" class="btn btn-secondary">Cancel</a>
+        <p><strong>Affected Employees:</strong></p>
+        <ul
+            style="max-height: 150px; overflow-y: auto; background: rgba(0,0,0,0.05); padding: 10px; border-radius: 4px;">
+            {% for obj in related_employees %}
+            <li>{{ obj }}</li>
+            {% endfor %}
+        </ul>
     </div>
-</form>
-{% endif %}
+    {% endif %}
+
+    <p>Are you sure you want to delete department: <strong>{{ department.name }}</strong>?</p>
+
+    <form method="post">
+        {% csrf_token %}
+        <div class="form-actions">
+            <button type="submit" class="btn btn-danger">Yes, Delete</button>
+            <a href="{% url 'department_list' %}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
 {% endblock %}

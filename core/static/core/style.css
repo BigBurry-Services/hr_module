@@ -162,6 +162,22 @@ textarea:focus {
     background-color: var(--white);
 }
 
+/* Error State */
+.has-error input,
+.has-error select,
+.has-error textarea {
+    border-color: #ef4444;
+    background-color: #fef2f2;
+}
+
+.errorlist {
+    color: #ef4444;
+    list-style: none;
+    padding: 0;
+    margin: 0.25rem 0 0 0;
+    font-size: 0.85rem;
+}
+
 /* Login/Register Container */
 .register-container {
     display: flex;

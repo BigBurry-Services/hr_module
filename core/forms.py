@@ -47,11 +47,9 @@ class DesignationForm(forms.ModelForm):
         fields = ['name']
 
 class AllowanceForm(forms.ModelForm):
-    amount = forms.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
-    
     class Meta:
         model = Allowance
-        fields = ['name', 'amount']
+        fields = ['name']
 
 class EmployeeForm(forms.ModelForm):
     contact_number = forms.CharField(max_length=15, validators=[RegexValidator(r'^\d{10,15}$', message="Enter a valid contact number (10-15 digits)")])
@@ -94,6 +92,9 @@ class EmployeeAllowanceForm(forms.ModelForm):
     class Meta:
         model = EmployeeAllowance
         fields = ['allowance', 'amount']
+        widgets = {
+            'allowance': forms.HiddenInput()
+        }
 
 from django.forms import inlineformset_factory
 EmployeeAllowanceFormSet = inlineformset_factory(

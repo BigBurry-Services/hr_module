@@ -8,6 +8,10 @@
     <div class="sidebar">
         <h2><span style="color: var(--secondary-color);">HR</span> Module</h2>
         <ul>
+            <li><a href="{% url 'dashboard' %}"
+                    class="{% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
+                    <span>🏠</span> Dashboard
+                </a></li>
             <li><a href="{% url 'employee_list' %}"
                     class="{% if request.resolver_match.url_name == 'employee_list' %}active{% endif %}">
                     <span>👥</span> Manage Employee

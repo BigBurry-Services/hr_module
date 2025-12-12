@@ -1,4 +1,5 @@
 from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib import messages
 from django.http import HttpResponse
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.forms import AuthenticationForm
@@ -9,7 +10,9 @@ import csv
 from .models import Employee, Attendance, HRProfile, Department, Designation, Allowance, AttendanceDevice, EmployeeAllowance
 from django.contrib.auth.models import User
 from django.db import transaction
-from .forms import EmployeeForm, AttendanceForm, SalarySummaryForm, RegistrationForm, DepartmentForm, DesignationForm, AllowanceForm, AttendanceDeviceForm, EmployeeAllowanceFormSet
+from .forms import EmployeeForm, AttendanceForm, SalarySummaryForm, RegistrationForm, DepartmentForm, DesignationForm, AllowanceForm, AttendanceDeviceForm, EmployeeAllowanceFormSet, EmployeeAllowanceForm
+from django.http import JsonResponse
+from .utils import DeviceSyncService
 
 @login_required
 def allowance_list(request):
@@ -92,14 +95,9 @@ def department_delete(request, pk):
     related_count = related_employees.count()
 
     if request.method == 'POST':
-        if related_count > 0:
-            return render(request, 'core/department_confirm_delete.html', {
-                'department': department,
-                'related_employees': related_employees,
-                'related_count': related_count,
-                'error': "Cannot delete department with assigned employees."
-            })
+        # Dependencies are handled by on_delete=SET_NULL in model
         department.delete()
+        messages.success(request, f"Department '{department.name}' deleted successfully.")
         return redirect('department_list')
     return render(request, 'core/department_confirm_delete.html', {
         'department': department,
@@ -139,14 +137,9 @@ def designation_delete(request, pk):
     related_count = related_employees.count()
 
     if request.method == 'POST':
-        if related_count > 0:
-            return render(request, 'core/designation_confirm_delete.html', {
-                'designation': designation,
-                'related_employees': related_employees,
-                'related_count': related_count,
-                'error': "Cannot delete designation with assigned employees."
-            })
+        # Dependencies are handled by on_delete=SET_NULL in model
         designation.delete()
+        messages.success(request, f"Designation '{designation.name}' deleted successfully.")
         return redirect('designation_list')
     return render(request, 'core/designation_confirm_delete.html', {
         'designation': designation,
@@ -240,24 +233,46 @@ def employee_list(request):
         'search_query': search_query
     })
 
+from django.forms import inlineformset_factory
+
 @login_required
 def employee_add(request):
+    allowances = Allowance.objects.all()
+    # Create a dynamic formset with enough extra fields for all allowances
+    # We disable delete since these are mandatory
+    EmployeeAllowanceFormSetDynamic = inlineformset_factory(
+        Employee, 
+        EmployeeAllowance, 
+        form=EmployeeAllowanceForm,
+        extra=len(allowances),
+        can_delete=False
+    )
+
     if request.method == 'POST':
         form = EmployeeForm(request.POST)
-        formset = EmployeeAllowanceFormSet(request.POST)
+        formset = EmployeeAllowanceFormSetDynamic(request.POST)
         if form.is_valid() and formset.is_valid():
             try:
                 with transaction.atomic():
                     employee = form.save()
                     formset.instance = employee
                     formset.save()
+                    messages.success(request, "Employee added successfully.")
                     return redirect('employee_list')
             except Exception as e:
-                # Handle errors (could add message to user)
-                pass
+                print(f"Error saving employee: {e}")
+                messages.error(request, f"System Error: {str(e)}")
+        else:
+            print("Form Errors:", form.errors)
+            print("Formset Errors:", formset.errors)
+            print("Formset Non-Form Errors:", formset.non_form_errors())
+            messages.error(request, "Please correct the errors below.")
     else:
         form = EmployeeForm()
-        formset = EmployeeAllowanceFormSet()
+        # Pre-populate with all allowances defaulted to 0
+        initial_allowances = [{'allowance': a, 'amount': 0} for a in allowances]
+        formset = EmployeeAllowanceFormSetDynamic(queryset=EmployeeAllowance.objects.none(), initial=initial_allowances)
+        
     return render(request, 'core/employee_form.html', {'form': form, 'formset': formset})
 
 @login_required
@@ -268,20 +283,46 @@ def employee_detail(request, pk):
 @login_required
 def employee_edit(request, pk):
     employee = get_object_or_404(Employee, pk=pk)
+    allowances = Allowance.objects.all()
+
+    # Ensure this employee has a record for every allowance (default to 0)
+    for allowance in allowances:
+        EmployeeAllowance.objects.get_or_create(
+            employee=employee,
+            allowance=allowance,
+            defaults={'amount': 0}
+        )
+    
+    # Use standard formset but with 0 extra, as we just created all necessary records
+    EmployeeAllowanceFormSetFixed = inlineformset_factory(
+        Employee, 
+        EmployeeAllowance, 
+        form=EmployeeAllowanceForm,
+        extra=0,
+        can_delete=False
+    )
+
     if request.method == 'POST':
         form = EmployeeForm(request.POST, instance=employee)
-        formset = EmployeeAllowanceFormSet(request.POST, instance=employee)
+        formset = EmployeeAllowanceFormSetFixed(request.POST, instance=employee)
         if form.is_valid() and formset.is_valid():
             try:
                 with transaction.atomic():
                     form.save()
                     formset.save()
+                    messages.success(request, f"Employee {employee.full_name} updated locally.")
                     return redirect('employee_list')
             except Exception as e:
-                pass
+                print(f"Error updating employee: {e}")
+                messages.error(request, f"System Error: {str(e)}")
+        else:
+             print("Edit Form Errors:", form.errors)
+             print("Edit Formset Errors:", formset.errors)
+             messages.error(request, "Please correct the errors below.")
     else:
         form = EmployeeForm(instance=employee)
-        formset = EmployeeAllowanceFormSet(instance=employee)
+        formset = EmployeeAllowanceFormSetFixed(instance=employee)
+        
     return render(request, 'core/employee_form.html', {'form': form, 'formset': formset})
 
 @login_required
@@ -643,3 +684,24 @@ def export_attendance_csv(request):
         ])
 
     return response
+
+@login_required
+def sync_attendance_view(request):
+    if request.method == 'POST':
+        try:
+            target_date_str = request.POST.get('date')
+            if target_date_str:
+                 target_date = datetime.datetime.strptime(target_date_str, '%Y-%m-%d').date()
+            else:
+                 target_date = datetime.date.today()
+            
+            service = DeviceSyncService()
+            results = service.sync_devices(target_date=target_date)
+            
+            if results['errors']:
+                return JsonResponse({'status': 'warning', 'message': 'Sync completed with errors.', 'details': results}, status=200)
+            
+            return JsonResponse({'status': 'success', 'message': f"Successfully processed {results['processed_count']} records from {results['devices_connected']} devices."}, status=200)
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+    return JsonResponse({'status': 'error', 'message': 'Invalid method'}, status=400)

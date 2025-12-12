@@ -30,7 +30,85 @@
                 class="btn btn-outline-secondary">Export CSV</button>
         </div>
     </form>
+    </form>
+    <div
+        style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #eee; display: flex; justify-content: flex-end; align-items: center; gap: 1rem;">
+        <span id="sync-status" style="font-size: 0.9rem; color: #666;"></span>
+        <button type="button" id="btn-sync-devices" class="btn btn-primary"
+            style="display: flex; align-items: center; gap: 0.5rem;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
+                class="bi bi-cloud-arrow-down-fill" viewBox="0 0 16 16">
+                <path
+                    d="M8 2a5.53 5.53 0 0 0-3.594 1.042.75.75 0 0 1 .233 1.31C5.992 4.018 7.197 4 8 4a2 2 0 0 1 2 2v4H6a.5.5 0 0 0 0 1h8z" />
+                <path
+                    d="M14.5 9.5a.5.5 0 0 0-.5.5v3 .5a.5.5 0 0 1-1 0v-4a.5.5 0 0 0-.5-.5h-2.17l-1.314-1.314A1.5 1.5 0 0 0 7.94 6.94l-1.314 1.314H4.5a.5.5 0 0 0-.5.5v4a.5.5 0 0 0 1 0v-3 .5a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 .5.5v3a.5.5 0 0 0 1 0v-3a.5.5 0 0 0-.5-.5z" />
+                <!-- Icon is illustrative -->
+                <path
+                    d="M8 0a5.53 5.53 0 0 0-3.594 1.042.75.75 0 0 1 .233 1.31C5.992 4.018 7.197 4 8 4a2 2 0 0 1 2 2v4H6a.5.5 0 0 0 0 1h8V6a5.53 5.53 0 0 0-2.406-4.648A.75.75 0 0 1 11.233 1.042 5.53 5.53 0 0 0 8 0m-2 5.5a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-2v4.5h2a.5.5 0 0 1 0 1h-5a.5.5 0 0 1 0-1h2V6h-2a.5.5 0 0 1-.5-.5" />
+                <path
+                    d="M13.405 11.793a.502.502 0 0 1 .716-.011A3.5 3.5 0 0 1 12.5 16h-9a3.5 3.5 0 0 1-1.621-6.603.5.5 0 0 1 .351.693 2.5 2.5 0 0 0 .77 4.41h9a2.5 2.5 0 0 0 1.405-4.707z" />
+                <path
+                    d="M8.5 6a.5.5 0 0 0-1 0v3.793L6.354 8.646a.5.5 0 1 0-.708.708l2 2a.5.5 0 0 0 .708 0l2-2a.5.5 0 0 0-.708-.708L8.5 9.793z" />
+            </svg>
+            Get Data from Devices
+        </button>
+    </div>
 </div>
+
+<script>
+    document.getElementById('btn-sync-devices').addEventListener('click', function () {
+        const btn = this;
+        const statusSpan = document.getElementById('sync-status');
+        const originalText = btn.innerHTML;
+        const date = document.getElementById('date').value;
+
+        btn.disabled = true;
+        btn.innerHTML = 'Fetching...';
+        statusSpan.innerText = 'Connecting to devices...';
+        statusSpan.style.color = '#666';
+
+        const formData = new FormData();
+        formData.append('date', date);
+        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+        fetch("{% url 'sync_attendance_from_devices' %}", {
+            method: 'POST',
+            body: formData
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    statusSpan.innerText = data.message;
+                    statusSpan.style.color = 'green';
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1500);
+                } else if (data.status === 'warning') {
+                    statusSpan.innerText = data.message;
+                    // Assuming user might want to see details, alerting them for now or logging
+                    alert(data.message + '\n' + data.details.errors.join('\n'));
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                    // maybe reload anyway to show partial data?
+                    setTimeout(() => {
+                        location.reload();
+                    }, 2000);
+                } else {
+                    statusSpan.innerText = 'Error: ' + data.message;
+                    statusSpan.style.color = 'red';
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                statusSpan.innerText = 'An unexpected error occurred.';
+                statusSpan.style.color = 'red';
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            });
+    });
+</script>
 
 <!-- Success/Error Messages -->
 {% if success_message %}
