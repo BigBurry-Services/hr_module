@@ -1,9 +1,179 @@
 {% extends 'core/dashboard_base.html' %}
 {% load static %}
 
-{% block dashboard_title %}Home{% endblock %}
+{% block dashboard_title %}Dashboard{% endblock %}
+
+{% block page_title %}Dashboard{% endblock %}
 
 {% block dashboard_content %}
-    <h1>Welcome to the Dashboard</h1>
-    <p>Use the sidebar to navigate through the HR module features.</p>
+<h1 style="margin-bottom: 2rem;">Welcome to HR Dashboard</h1>
+
+<!-- Statistics Cards -->
+<div class="row" style="margin-bottom: 2rem;">
+    <div class="col-md-4">
+        <div class="card"
+            style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none;">
+            <div class="card-body" style="padding: 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <h6 style="opacity: 0.9; margin-bottom: 0.5rem; font-size: 0.9rem;">Total Employees</h6>
+                        <h2 style="margin: 0; font-size: 2.5rem; font-weight: bold;">{{ total_employees }}</h2>
+                    </div>
+                    <div style="font-size: 3rem; opacity: 0.3;">👥</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card"
+            style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; border: none;">
+            <div class="card-body" style="padding: 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <h6 style="opacity: 0.9; margin-bottom: 0.5rem; font-size: 0.9rem;">Birthdays Today</h6>
+                        <h2 style="margin: 0; font-size: 2.5rem; font-weight: bold;">{{ birthdays_today_count }}</h2>
+                    </div>
+                    <div style="font-size: 3rem; opacity: 0.3;">🎂</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card"
+            style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white; border: none;">
+            <div class="card-body" style="padding: 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <h6 style="opacity: 0.9; margin-bottom: 0.5rem; font-size: 0.9rem;">Birthdays Tomorrow</h6>
+                        <h2 style="margin: 0; font-size: 2.5rem; font-weight: bold;">{{ birthdays_tomorrow_count }}</h2>
+                    </div>
+                    <div style="font-size: 3rem; opacity: 0.3;">🎉</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Today's Birthdays -->
+{% if birthdays_today %}
+<div class="card" style="margin-bottom: 1.5rem; border-left: 4px solid #f5576c;">
+    <div class="card-header" style="background-color: #fff5f7; border-bottom: 1px solid #ffe0e6;">
+        <h4 style="margin: 0; color: #f5576c;">🎂 Birthdays Today</h4>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Employee Code</th>
+                        <th>Name</th>
+                        <th>Department</th>
+                        <th>Date of Birth</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for employee in birthdays_today %}
+                    <tr>
+                        <td><strong>{{ employee.employee_code }}</strong></td>
+                        <td>
+                            <a href="{% url 'employee_detail' employee.id %}" style="font-weight: 600; color: #f5576c;">
+                                {{ employee.full_name }}
+                            </a>
+                        </td>
+                        <td>{{ employee.department.name|default:"N/A" }}</td>
+                        <td>{{ employee.date_of_birth|date:"F d, Y" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Tomorrow's Birthdays -->
+{% if birthdays_tomorrow %}
+<div class="card" style="margin-bottom: 1.5rem; border-left: 4px solid #00f2fe;">
+    <div class="card-header" style="background-color: #f0fcff; border-bottom: 1px solid #d0f4ff;">
+        <h4 style="margin: 0; color: #00a8cc;">🎉 Birthdays Tomorrow</h4>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Employee Code</th>
+                        <th>Name</th>
+                        <th>Department</th>
+                        <th>Date of Birth</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for employee in birthdays_tomorrow %}
+                    <tr>
+                        <td><strong>{{ employee.employee_code }}</strong></td>
+                        <td>
+                            <a href="{% url 'employee_detail' employee.id %}" style="font-weight: 600; color: #00a8cc;">
+                                {{ employee.full_name }}
+                            </a>
+                        </td>
+                        <td>{{ employee.department.name|default:"N/A" }}</td>
+                        <td>{{ employee.date_of_birth|date:"F d, Y" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- No Birthdays Message -->
+{% if not birthdays_today and not birthdays_tomorrow %}
+<div class="card" style="margin-bottom: 1.5rem;">
+    <div class="card-body text-center" style="padding: 3rem;">
+        <div style="font-size: 4rem; margin-bottom: 1rem; opacity: 0.3;">🎂</div>
+        <h4 style="color: #666;">No upcoming birthdays in the next 2 days</h4>
+        <p style="color: #999;">Check back later for birthday celebrations!</p>
+    </div>
+</div>
+{% endif %}
+
+<!-- Quick Actions -->
+<div class="card">
+    <div class="card-header">
+        <h4 style="margin: 0;">Quick Actions</h4>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-3">
+                <a href="{% url 'employee_add' %}" class="btn btn-primary btn-block" style="padding: 1rem;">
+                    <span style="font-size: 1.5rem;">➕</span><br>
+                    Add Employee
+                </a>
+            </div>
+            <div class="col-md-3">
+                <a href="{% url 'attendance_mark' %}" class="btn btn-success btn-block" style="padding: 1rem;">
+                    <span style="font-size: 1.5rem;">✓</span><br>
+                    Mark Attendance
+                </a>
+            </div>
+            <div class="col-md-3">
+                <a href="{% url 'employee_list' %}" class="btn btn-info btn-block" style="padding: 1rem;">
+                    <span style="font-size: 1.5rem;">👥</span><br>
+                    View Employees
+                </a>
+            </div>
+            <div class="col-md-3">
+                <a href="{% url 'summary' %}" class="btn btn-warning btn-block" style="padding: 1rem;">
+                    <span style="font-size: 1.5rem;">📊</span><br>
+                    Salary Summary
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}

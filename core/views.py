@@ -155,7 +155,34 @@ def designation_delete(request, pk):
     })
 
 def dashboard(request):
-    return render(request, 'core/dashboard_base.html')
+    # Total employees
+    total_employees = Employee.objects.count()
+    
+    # Birthday logic
+    today = datetime.date.today()
+    tomorrow = today + datetime.timedelta(days=1)
+    
+    # Employees with birthdays today
+    birthdays_today = Employee.objects.filter(
+        date_of_birth__month=today.month,
+        date_of_birth__day=today.day
+    ).exclude(date_of_birth__isnull=True)
+    
+    # Employees with birthdays tomorrow
+    birthdays_tomorrow = Employee.objects.filter(
+        date_of_birth__month=tomorrow.month,
+        date_of_birth__day=tomorrow.day
+    ).exclude(date_of_birth__isnull=True)
+    
+    context = {
+        'total_employees': total_employees,
+        'birthdays_today': birthdays_today,
+        'birthdays_tomorrow': birthdays_tomorrow,
+        'birthdays_today_count': birthdays_today.count(),
+        'birthdays_tomorrow_count': birthdays_tomorrow.count(),
+    }
+    
+    return render(request, 'core/dashboard.html', context)
 
 def login_view(request):
     if request.method == 'POST':
