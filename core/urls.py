@@ -3,10 +3,18 @@ from . import views
 
 urlpatterns = [
     path('dashboard/', views.dashboard, name='dashboard'),
+    path('employee-dashboard/', views.employee_dashboard, name='employee_dashboard'),
     path('login/', views.login_view, name='login'),
     path('', views.login_view, name='login'),
     path('register/', views.register_view, name='register'),
     path('logout/', views.logout_view, name='logout'),
+    
+    # HR Management (Admin Only)
+    path('site-admin/hr/manage/', views.manage_hrs, name='manage_hrs'),
+    path('site-admin/hr/add/', views.manage_hr_add, name='manage_hr_add'),
+    path('site-admin/hr/<int:pk>/edit/', views.manage_hr_edit, name='manage_hr_edit'),
+    path('site-admin/hr/<int:pk>/delete/', views.manage_hr_delete, name='manage_hr_delete'),
+    path('site-admin/hr/<int:pk>/toggle-status/', views.toggle_user_status, name='toggle_user_status'),
 
     # Department and Designation Management URLs
     path('departments/', views.department_list, name='department_list'),

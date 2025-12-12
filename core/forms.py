@@ -1,5 +1,5 @@
 from django import forms
-from .models import Employee, Attendance, Department, Designation, Allowance, AttendanceDevice, EmployeeAllowance
+from .models import Employee, Attendance, Department, Designation, Allowance, AttendanceDevice, EmployeeAllowance, HRProfile
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
 from django.core.validators import MinLengthValidator, MinValueValidator, RegexValidator
@@ -57,6 +57,10 @@ class EmployeeForm(forms.ModelForm):
     basic_salary = forms.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
     da = forms.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
     hra = forms.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
+    
+    # User account fields
+    username = forms.CharField(max_length=150, help_text="Username for employee login")
+    password = forms.CharField(widget=forms.PasswordInput, required=False, help_text="Leave blank to keep current password (or auto-generate if new)")
 
     class Meta:
         model = Employee
@@ -73,6 +77,56 @@ class EmployeeForm(forms.ModelForm):
             'joining_date': forms.DateInput(attrs={'type': 'date'}),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk and self.instance.user:
+            self.fields['username'].initial = self.instance.user.username
+            self.fields['username'].disabled = True # Prevent username change for simplicity/security
+            self.fields['password'].label = "New Password"
+        elif self.instance and self.instance.pk:
+            self.fields['password'].required = True # User missing, enforce creation? Or keep optional? Let's make it required if not linked.
+            self.fields['username'].required = True
+
+    def clean_username(self):
+        username = self.cleaned_data.get('username')
+        if not self.instance.pk: # New employee
+            if User.objects.filter(username=username).exists():
+                raise ValidationError("Username already exists. Please choose another.")
+        return username
+
+    def save(self, commit=True):
+        employee = super().save(commit=False)
+        username = self.cleaned_data.get('username')
+        password = self.cleaned_data.get('password')
+        
+        if commit:
+            if employee.user:
+                # Update existing user
+                user = employee.user
+                if password:
+                    user.set_password(password)
+                    user.save()
+            else:
+                # Create new user
+                if User.objects.filter(username=username).exists():
+                     # Fallback if race condition or logic error
+                     pass 
+                else:
+                    user = User.objects.create_user(username=username, password=password)
+                    # Assign Role 2 (Employee) - Though role is on HRProfile, we might need one?
+                    # Design check: Employee login relies on linking. Core Role logic is in HRProfile.
+                    # Should we create HRProfile(role=2) or just use basic User + Employee link?
+                    # The login view checks `hasattr(user, 'employee_profile')` as fallback.
+                    # So basic User is fine. But for consistency, let's create HRProfile(role=2) if we want "role" checking.
+                    # Previous code: fallback logic exists.
+                    # Let's CREATE HRProfile(role=2) to be safe and consistent.
+                    HRProfile.objects.create(user=user, role=2)
+                    employee.user = user
+            
+            employee.save()
+            self.save_m2m()
+        return employee
+
     def clean_date_of_birth(self):
         dob = self.cleaned_data.get('date_of_birth')
         if dob and dob > datetime.date.today():
@@ -83,6 +137,10 @@ class EmployeeForm(forms.ModelForm):
         cleaned_data = super().clean()
         dob = cleaned_data.get('date_of_birth')
         joining_date = cleaned_data.get('joining_date')
+        
+        # Validate password for new users
+        if not self.instance.pk and not self.cleaned_data.get('password'):
+             self.add_error('password', "Password is required for new employees.")
 
         if dob and joining_date and joining_date < dob:
             raise ValidationError("Joining date cannot be before Date of Birth.")
@@ -144,3 +202,20 @@ class SalarySummaryForm(forms.Form):
     ]
     month = forms.ChoiceField(choices=MONTH_CHOICES)
     employee = forms.ModelChoiceField(queryset=Employee.objects.all(), required=False) # Optional employee filter
+
+class HRProfileForm(forms.ModelForm):
+    username = forms.CharField(max_length=150)
+    password = forms.CharField(widget=forms.PasswordInput, required=False)
+    email = forms.EmailField(required=False)
+    
+    class Meta:
+        model = HRProfile
+        fields = ['department', 'position', 'role']
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            self.fields['username'].initial = self.instance.user.username
+            self.fields['email'].initial = self.instance.user.email
+            self.fields['password'].help_text = "Leave blank to keep current password"
+        self.fields['role'].label = "User Role"

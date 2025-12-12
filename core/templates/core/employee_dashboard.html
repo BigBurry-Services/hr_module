@@ -1,0 +1,76 @@
+{% extends 'core/base.html' %}
+{% load static %}
+
+{% block title %}Employee Dashboard{% endblock %}
+
+{% block content %}
+<div class="dashboard-layout">
+    <div class="sidebar">
+        <h2><span style="color: var(--secondary-color);">My</span> Profile</h2>
+        <ul>
+            <li><a href="#" class="active">
+                    <span>🏠</span> Dashboard
+                </a></li>
+            <div class="logout-link">
+                <a href="{% url 'logout' %}"><span>🚪</span> Logout</a>
+            </div>
+    </div>
+    <div class="main-content">
+        <div class="main-content-header">
+            <h1>Welcome, {{ employee.full_name }}!</h1>
+        </div>
+
+        <div class="card">
+            <h3>My Details</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                <div>
+                    <strong>Employee Code:</strong> {{ employee.employee_code }}
+                </div>
+                <div>
+                    <strong>Department:</strong> {{ employee.department }}
+                </div>
+                <div>
+                    <strong>Designation:</strong> {{ employee.designation }}
+                </div>
+                <div>
+                    <strong>Joining Date:</strong> {{ employee.joining_date }}
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Recent Attendance</h3>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>In Time</th>
+                        <th>Out Time</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for record in recent_attendance %}
+                    <tr>
+                        <td>{{ record.date }}</td>
+                        <td>{{ record.check_in_time|default:"-" }}</td>
+                        <td>{{ record.check_out_time|default:"-" }}</td>
+                        <td>
+                            {% if record.check_in_time and record.check_out_time %}
+                            <span class="badge badge-success">Present</span>
+                            {% else %}
+                            <span class="badge badge-warning">Incomplete</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4">No attendance records found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

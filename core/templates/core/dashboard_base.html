@@ -12,6 +12,13 @@
                     class="{% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
                     <span>🏠</span> Dashboard
                 </a></li>
+
+            {% if user.is_superuser or user.hrprofile.role == 0 %}
+            <li><a href="{% url 'manage_hrs' %}"
+                    class="{% if 'manage_hr' in request.resolver_match.url_name %}active{% endif %}">
+                    <span>👥</span> Manage System Users
+                </a></li>
+            {% endif %}
             <li><a href="{% url 'employee_list' %}"
                     class="{% if request.resolver_match.url_name == 'employee_list' %}active{% endif %}">
                     <span>👥</span> Manage Employee
@@ -47,8 +54,20 @@
 
     </div>
     <div class="main-content">
-        <div class="main-content-header">
-            <h1>{% block page_title %}{% endblock %}</h1>
+        <div class="main-content-header" style="justify-content: space-between; display: flex; align-items: center;">
+            <h1 style="margin: 0;">{% block page_title %}{% endblock %}</h1>
+            <div class="user-info" style="text-align: right;">
+                <span style="display: block; font-weight: bold;">{{ user.username }}</span>
+                <span
+                    style="font-size: 0.85em; color: #666; background: #e5e7eb; padding: 2px 8px; border-radius: 12px;">
+                    {% if user.is_superuser %}Super Admin
+                    {% elif user.hrprofile.role == 0 %}Administrator
+                    {% elif user.hrprofile.role == 1 %}HR Manager
+                    {% elif user.hrprofile.role == 2 %}Employee
+                    {% else %}User
+                    {% endif %}
+                </span>
+            </div>
         </div>
         {% block dashboard_content %}
         <h1>Welcome to the HR Dashboard!</h1>

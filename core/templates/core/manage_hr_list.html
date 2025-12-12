@@ -1,0 +1,56 @@
+{% extends 'core/dashboard_base.html' %}
+{% load static %}
+
+{% block dashboard_title %}Manage System Users{% endblock %}
+
+{% block page_title %}System Users (HR & Admin){% endblock %}
+
+{% block dashboard_content %}
+<div class="card">
+    <div style="text-align: right; margin-bottom: 20px;">
+        <a href="{% url 'manage_hr_add' %}" class="btn btn-primary" style="background-color: var(--secondary-color);">+
+            Add User</a>
+    </div>
+
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Username</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Department</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for profile in profiles %}
+            <tr>
+                <td>{{ profile.user.username }}</td>
+                <td>
+                    {% if profile.role == 0 %}<span class="badge badge-primary">Admin</span>
+                    {% elif profile.role == 1 %}<span class="badge badge-success">HR</span>
+                    {% else %}<span class="badge badge-secondary">Employee</span>{% endif %}
+                </td>
+                <td>
+                    {% if profile.user.is_active %}
+                    <span style="color: green;">● Active</span>
+                    {% else %}
+                    <span style="color: red;">● Blocked</span>
+                    {% endif %}
+                </td>
+                <td>{{ profile.department|default:"-" }}</td>
+                <td class="actions">
+                    <a href="{% url 'toggle_user_status' profile.pk %}" class="btn-icon"
+                        title="{% if profile.user.is_active %}Block{% else %}Unblock{% endif %}"
+                        style="margin-right: 5px;">
+                        {% if profile.user.is_active %}🚫{% else %}✅{% endif %}
+                    </a>
+                    <a href="{% url 'manage_hr_edit' profile.pk %}" class="btn-icon" title="Edit">✏️</a>
+                    <a href="{% url 'manage_hr_delete' profile.pk %}" class="btn-icon delete" title="Delete">🗑️</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

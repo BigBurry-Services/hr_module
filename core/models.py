@@ -3,12 +3,30 @@ from django.contrib.auth.models import User
 import datetime
 
 class HRProfile(models.Model):
+    ROLE_CHOICES = [
+        (0, 'Admin'),
+        (1, 'HR'),
+        (2, 'Employee'),
+    ]
     user = models.OneToOneField(User, on_delete=models.CASCADE)
+    role = models.IntegerField(choices=ROLE_CHOICES, default=1) # Default to HR for now to maintain backward compatibility
     department = models.CharField(max_length=100, blank=True, null=True)
     position = models.CharField(max_length=100, blank=True, null=True)
 
     def __str__(self):
-        return self.user.username
+        return f"{self.user.username} ({self.get_role_display()})"
+    
+    @property
+    def is_admin(self):
+        return self.role == 0
+    
+    @property
+    def is_hr(self):
+        return self.role == 1
+    
+    @property
+    def is_employee(self):
+        return self.role == 2
 
 class Department(models.Model):
     name = models.CharField(max_length=100, unique=True)
@@ -30,6 +48,9 @@ class Allowance(models.Model):
         return self.name
 
 class Employee(models.Model):
+    # Link to Django User for login (Level 2)
+    user = models.OneToOneField(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='employee_profile')
+    
     GENDER_CHOICES = [
         ('M', 'Male'),
         ('F', 'Female'),

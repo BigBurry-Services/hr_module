@@ -10,11 +10,12 @@ import csv
 from .models import Employee, Attendance, HRProfile, Department, Designation, Allowance, AttendanceDevice, EmployeeAllowance
 from django.contrib.auth.models import User
 from django.db import transaction
-from .forms import EmployeeForm, AttendanceForm, SalarySummaryForm, RegistrationForm, DepartmentForm, DesignationForm, AllowanceForm, AttendanceDeviceForm, EmployeeAllowanceFormSet, EmployeeAllowanceForm
+from .forms import EmployeeForm, AttendanceForm, SalarySummaryForm, RegistrationForm, DepartmentForm, DesignationForm, AllowanceForm, AttendanceDeviceForm, EmployeeAllowanceFormSet, EmployeeAllowanceForm, HRProfileForm
 from django.http import JsonResponse
 from .utils import DeviceSyncService
+from .decorators import hr_required, admin_required
 
-@login_required
+@hr_required
 def allowance_list(request):
     allowances = Allowance.objects.all()
     if request.method == 'POST':
@@ -63,7 +64,7 @@ def allowance_delete(request, pk):
         'related_count': related_count
     })
 
-@login_required
+@hr_required
 def department_list(request):
     departments = Department.objects.all()
     if request.method == 'POST':
@@ -105,7 +106,7 @@ def department_delete(request, pk):
         'related_count': related_count
     })
 
-@login_required
+@hr_required
 def designation_list(request):
     designations = Designation.objects.all()
     if request.method == 'POST':
@@ -147,6 +148,7 @@ def designation_delete(request, pk):
         'related_count': related_count
     })
 
+@hr_required
 def dashboard(request):
     # Total employees
     total_employees = Employee.objects.count()
@@ -186,7 +188,23 @@ def login_view(request):
             user = authenticate(username=username, password=password)
             if user is not None:
                 login(request, user)
-                return redirect('dashboard')
+                messages.success(request, f"Welcome back, {username}!")
+                
+                # Role-based redirect
+                if hasattr(user, 'hrprofile'):
+                    if user.hrprofile.role == 2: # Employee
+                        return redirect('employee_dashboard')
+                    else: # HR or Admin
+                        return redirect('dashboard')
+                elif hasattr(user, 'employee_profile'):
+                     # Fallback if accessed via Employee-User link but NO HRProfile
+                     return redirect('employee_dashboard')
+                else:
+                    return redirect('dashboard')
+            else:
+                messages.error(request, "Invalid username or password.")
+        else:
+            messages.error(request, "Invalid username or password.")
     else:
         form = AuthenticationForm()
     return render(request, 'core/login.html', {'form': form})
@@ -195,16 +213,24 @@ def register_view(request):
     if request.method == 'POST':
         form = RegistrationForm(request.POST)
         if form.is_valid():
-            user = User.objects.create_user(
-                username=form.cleaned_data['username'],
-                email=form.cleaned_data['email'],
-                password=form.cleaned_data['password']
-            )
-            # Create an HRProfile for the new user
-            HRProfile.objects.create(
-                user=user
-            )
-            return redirect('login')
+            try:
+                user = User.objects.create_user(
+                    username=form.cleaned_data['username'],
+                    email=form.cleaned_data['email'],
+                    password=form.cleaned_data['password']
+                )
+                # Create an HRProfile for the new user, defaulting to HR (Level 1)
+                # User can change roles via Admin if needed
+                HRProfile.objects.create(
+                    user=user,
+                    role=1 
+                )
+                messages.success(request, "Account created successfully! Please login.")
+                return redirect('login')
+            except Exception as e:
+                messages.error(request, f"Registration failed: {str(e)}")
+        else:
+            messages.error(request, "Please correct the errors below.")
     else:
         form = RegistrationForm()
     return render(request, 'core/register.html', {'form': form})
@@ -213,7 +239,7 @@ def logout_view(request):
     logout(request)
     return redirect('login')
 
-@login_required
+@hr_required
 def employee_list(request):
     employees = Employee.objects.all()
     
@@ -333,7 +359,7 @@ def employee_delete(request, pk):
         return redirect('employee_list')
     return render(request, 'core/employee_confirm_delete.html', {'employee': employee})
 
-@login_required
+@hr_required
 def attendance_mark(request):
     departments = Department.objects.all()
     
@@ -441,7 +467,7 @@ def attendance_delete(request, pk):
         return redirect('attendance_mark')
     return render(request, 'core/attendance_confirm_delete.html', {'attendance': attendance})
 
-@login_required
+@hr_required
 def attendance_sync(request):
     """
     Redirects to the device list since management is now handled there.
@@ -449,7 +475,7 @@ def attendance_sync(request):
     """
     return redirect('device_list')
 
-@login_required
+@hr_required
 def device_list(request):
     devices = AttendanceDevice.objects.all()
     if request.method == 'POST':
@@ -514,7 +540,7 @@ def device_test_connection(request, pk):
     return render(request, 'core/device_list.html', context)
 
 
-@login_required
+@hr_required
 def summary(request):
     form = SalarySummaryForm(request.POST or None)
     summary_data = None
@@ -705,3 +731,111 @@ def sync_attendance_view(request):
         except Exception as e:
             return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
     return JsonResponse({'status': 'error', 'message': 'Invalid method'}, status=400)
+
+@login_required
+def employee_dashboard(request):
+    # Ensure this view is for employees or admins, but standard flow is for Role 2
+    # If an HR tries to access, they can, but the dashboard is tailored for the user's LINKED employee record.
+    
+    # Try to find the linked employee record
+    try:
+        employee = request.user.employee_profile
+    except Employee.DoesNotExist:
+        # If Admin/HR accesses this but isn't an "Employee" in the table:
+        if hasattr(request.user, 'hrprofile') and request.user.hrprofile.role < 2:
+            messages.info(request, "You are logged in as HR/Admin. You don't have a personal employee record linked.")
+            return redirect('dashboard')
+            
+        messages.error(request, "No employee record linked to this account.")
+        return redirect('login')
+
+    # Get recent attendance
+    recent_attendance = Attendance.objects.filter(employee=employee).order_by('-date')[:10]
+    
+    context = {
+        'employee': employee,
+        'recent_attendance': recent_attendance,
+    }
+    return render(request, 'core/employee_dashboard.html', context)
+
+@admin_required
+def manage_hrs(request):
+    profiles = HRProfile.objects.all()
+    return render(request, 'core/manage_hr_list.html', {'profiles': profiles})
+
+@admin_required
+def manage_hr_add(request):
+    if request.method == 'POST':
+        form = HRProfileForm(request.POST)
+        if form.is_valid():
+            try:
+                # Create User
+                user = User.objects.create_user(
+                    username=form.cleaned_data['username'],
+                    password=form.cleaned_data['password'],
+                    email=form.cleaned_data['email']
+                )
+                # Create Profile
+                profile = form.save(commit=False)
+                profile.user = user
+                profile.save()
+                messages.success(request, f"User {user.username} created successfully.")
+                return redirect('manage_hrs')
+            except Exception as e:
+                messages.error(request, f"Error creating user: {e}")
+    else:
+        form = HRProfileForm()
+    return render(request, 'core/manage_hr_form.html', {'form': form, 'title': 'Add New User'})
+
+@admin_required
+def manage_hr_edit(request, pk):
+    profile = get_object_or_404(HRProfile, pk=pk)
+    if request.method == 'POST':
+        form = HRProfileForm(request.POST, instance=profile)
+        if form.is_valid():
+            try:
+                user = profile.user
+                user.username = form.cleaned_data['username']
+                user.email = form.cleaned_data['email']
+                if form.cleaned_data['password']:
+                    user.set_password(form.cleaned_data['password'])
+                user.save()
+                form.save()
+                messages.success(request, f"User {user.username} updated successfully.")
+                return redirect('manage_hrs')
+            except Exception as e:
+                messages.error(request, f"Error updating user: {e}")
+    else:
+        form = HRProfileForm(instance=profile)
+    return render(request, 'core/manage_hr_form.html', {'form': form, 'title': 'Edit User'})
+
+@admin_required
+def manage_hr_delete(request, pk):
+    profile = get_object_or_404(HRProfile, pk=pk)
+    if request.method == 'POST':
+        user = profile.user
+        # Prevent self-deletion
+        if request.user == user:
+            messages.error(request, "You cannot delete your own account.")
+            return redirect('manage_hrs')
+            
+        user.delete() # Cascade deletes profile
+        messages.success(request, f"User {user.username} deleted successfully.")
+        return redirect('manage_hrs')
+    
+    # Render a simple confirm page or re-use a generic one
+    return render(request, 'core/hr_confirm_delete.html', {'profile': profile})
+
+@admin_required
+def toggle_user_status(request, pk):
+    profile = get_object_or_404(HRProfile, pk=pk)
+    if request.user == profile.user:
+        messages.error(request, "You cannot block your own account.")
+    else:
+        user = profile.user
+        user.is_active = not user.is_active
+        user.save()
+        status = "blocked" if not user.is_active else "activated"
+        messages.success(request, f"User {user.username} has been {status}.")
+    
+    return redirect('manage_hrs')
