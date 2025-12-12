@@ -48,25 +48,27 @@
                     <span>💰</span> Manage Allowances
                 </a></li>
 
-            <div class="logout-link">
-                <a href="{% url 'logout' %}"><span>🚪</span> Logout</a>
-            </div>
+
 
     </div>
     <div class="main-content">
         <div class="main-content-header" style="justify-content: space-between; display: flex; align-items: center;">
             <h1 style="margin: 0;">{% block page_title %}{% endblock %}</h1>
-            <div class="user-info" style="text-align: right;">
-                <span style="display: block; font-weight: bold;">{{ user.username }}</span>
-                <span
-                    style="font-size: 0.85em; color: #666; background: #e5e7eb; padding: 2px 8px; border-radius: 12px;">
-                    {% if user.is_superuser %}Super Admin
-                    {% elif user.hrprofile.role == 0 %}Administrator
-                    {% elif user.hrprofile.role == 1 %}HR Manager
-                    {% elif user.hrprofile.role == 2 %}Employee
-                    {% else %}User
-                    {% endif %}
-                </span>
+            <div class="user-info" style="display: flex; align-items: center; gap: 15px;">
+                <div style="text-align: right;">
+                    <span style="display: block; font-weight: bold;">{{ user.username }}</span>
+                    <span
+                        style="font-size: 0.85em; color: #666; background: #e5e7eb; padding: 2px 8px; border-radius: 12px;">
+                        {% if user.is_superuser %}Super Admin
+                        {% elif user.hrprofile.role == 0 %}Administrator
+                        {% elif user.hrprofile.role == 1 %}HR Manager
+                        {% elif user.hrprofile.role == 2 %}Employee
+                        {% else %}User
+                        {% endif %}
+                    </span>
+                </div>
+                <a href="{% url 'logout' %}" class="btn btn-sm btn-outline-danger"
+                    style="text-decoration: none; padding: 5px 10px; border: 1px solid #ef4444; color: #ef4444; border-radius: 5px; font-weight: bold;">Logout</a>
             </div>
         </div>
         {% block dashboard_content %}
