@@ -14,6 +14,7 @@ from .forms import EmployeeForm, AttendanceForm, SalarySummaryForm, Registration
 from django.http import JsonResponse
 from .utils import DeviceSyncService
 from .decorators import hr_required, admin_required
+from decimal import Decimal
 
 @hr_required
 def allowance_list(request):
@@ -606,14 +607,38 @@ def summary(request):
                     'amount': amount
                 })
         
-        salary_payable = salary_from_days + total_allowances + da + hra
+        gross_salary = salary_from_days + total_allowances + da + hra
+        
+        # Deductions Calculation
+        pf = 0
+        esi = 0
+        
+        # PF Calculation: 12% of (Basic + DA)
+        # Note: Usually restricted to 15000 ceiling, but standard is 12% of basic+da
+        pf_base = salary_from_days + da  # Using earned basic
+        pf = pf_base * Decimal('0.12')
+        
+        # ESI Calculation: 0.75% of Gross Salary if Gross <= 21,000
+        # Check standard gross rules. Assuming monthly gross for eligibility check.
+        # Ideally, check 'full' gross vs 'earned' gross. ESI is usually on earned gross.
+        if gross_salary <= 21000:
+             esi = gross_salary * Decimal('0.0075')
+        
+        total_deductions = pf + esi
+        
+        salary_payable = gross_salary - total_deductions
 
         summary_data.update({
              'basic_salary': basic_salary,
+             'earned_basic': salary_from_days,
              'da': da,
              'hra': hra,
              'total_allowances': total_allowances,
              'allowance_list': allowance_list,
+             'gross_salary': gross_salary,
+             'pf': pf,
+             'esi': esi,
+             'total_deductions': total_deductions,
              'salary_payable': salary_payable,
              'daily_wage': daily_wage,
              'attendance_list': attendance_records.order_by('date')
@@ -636,14 +661,37 @@ def summary(request):
             p.drawString(100, 680, f"Present Days: {summary_data['total_present_days']}")
             p.drawString(100, 660, f"Absent Days: {summary_data['total_absent_days']}")
             
-            p.drawString(100, 630, "Earnings:")
-            p.drawString(120, 610, f"Basic Salary (Pro-rated): {salary_from_days:.2f} (Full: {basic_salary})")
-            p.drawString(120, 590, f"DA: {da}")
-            p.drawString(120, 570, f"HRA: {hra}")
-            p.drawString(120, 550, f"Total Allowances: {total_allowances:.2f}")
-            
+            y = 630
+            p.setFont("Helvetica-Bold", 14)
+            p.drawString(100, y, "Earnings:")
+            y -= 20
+            p.setFont("Helvetica", 12)
+            p.drawString(120, y, f"Basic Salary (Earned): {summary_data['earned_basic']:.2f} (Full: {basic_salary})")
+            y -= 20
+            p.drawString(120, y, f"DA: {summary_data['da']}")
+            y -= 20
+            p.drawString(120, y, f"HRA: {summary_data['hra']}")
+            y -= 20
+            p.drawString(120, y, f"Total Allowances: {summary_data['total_allowances']:.2f}")
+            y -= 20
             p.setFont("Helvetica-Bold", 12)
-            p.drawString(100, 520, f"Net Salary Payable: {salary_payable:.2f}")
+            p.drawString(120, y, f"Gross Salary: {summary_data['gross_salary']:.2f}")
+
+            y -= 40
+            p.setFont("Helvetica-Bold", 14)
+            p.drawString(100, y, "Deductions:")
+            y -= 20
+            p.setFont("Helvetica", 12)
+            p.drawString(120, y, f"PF (12%): {summary_data['pf']:.2f}")
+            y -= 20
+            p.drawString(120, y, f"ESI (0.75%): {summary_data['esi']:.2f}")
+            y -= 20
+            p.setFont("Helvetica-Bold", 12)
+            p.drawString(120, y, f"Total Deductions: {summary_data['total_deductions']:.2f}")
+            
+            y -= 40
+            p.setFont("Helvetica-Bold", 14)
+            p.drawString(100, y, f"Net Salary Payable: {summary_data['salary_payable']:.2f}")
 
             p.showPage()
             p.save()

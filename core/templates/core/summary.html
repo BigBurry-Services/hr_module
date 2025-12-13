@@ -6,9 +6,19 @@
 {% block page_title %}Salary Summary{% endblock %}
 
 {% block dashboard_content %}
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+
 <form method="post" class="card">
     {% csrf_token %}
-    {{ form.as_p }}
+    <div class="mb-3">
+        <label for="id_month" class="form-label">Month</label>
+        {{ form.month }}
+    </div>
+    <div class="mb-3">
+        <label for="id_employee" class="form-label">Select Employee</label>
+        {{ form.employee }}
+    </div>
+
     <div class="form-actions">
         {% if summary_data %}
         <button type="submit" name="action" value="generate" class="btn btn-primary">Update View</button>
@@ -27,36 +37,72 @@
     </div>
     <div class="card-body">
 
-        <!-- Employee Salary Components -->
-        <h3>Salary Components</h3>
-        <table class="table table-bordered">
-            <thead class="table-light">
-                <tr>
-                    <th>Component</th>
-                    <th>Amount</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td><strong>Basic Salary (Monthly)</strong></td>
-                    <td>{{ summary_data.basic_salary }}</td>
-                </tr>
-                <tr>
-                    <td><strong>Dearness Allowance (DA)</strong></td>
-                    <td>{{ summary_data.da }}</td>
-                </tr>
-                <tr>
-                    <td><strong>House Rent Allowance (HRA)</strong></td>
-                    <td>{{ summary_data.hra }}</td>
-                </tr>
-                {% for allowance in summary_data.allowance_list %}
-                <tr>
-                    <td>{{ allowance.name }}</td>
-                    <td>{{ allowance.amount }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        <div class="row">
+            <!-- Earnings -->
+            <div class="col-md-6">
+                <div class="card mb-3">
+                    <div class="card-header bg-success text-white">
+                        <h4 class="mb-0">Earnings</h4>
+                    </div>
+                    <table class="table table-bordered mb-0">
+                        <tbody>
+                            <tr>
+                                <td>Basic Salary (Earned)</td>
+                                <td class="text-end">{{ summary_data.earned_basic|floatformat:2 }}</td>
+                            </tr>
+                            <tr>
+                                <td>Dearness Allowance (DA)</td>
+                                <td class="text-end">{{ summary_data.da }}</td>
+                            </tr>
+                            <tr>
+                                <td>House Rent Allowance (HRA)</td>
+                                <td class="text-end">{{ summary_data.hra }}</td>
+                            </tr>
+                            {% for allowance in summary_data.allowance_list %}
+                            <tr>
+                                <td>{{ allowance.name }}</td>
+                                <td class="text-end">{{ allowance.amount }}</td>
+                            </tr>
+                            {% endfor %}
+                            <tr class="table-success fw-bold">
+                                <td>Gross Salary</td>
+                                <td class="text-end">{{ summary_data.gross_salary|floatformat:2 }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Deductions -->
+            <div class="col-md-6">
+                <div class="card mb-3">
+                    <div class="card-header bg-danger text-white">
+                        <h4 class="mb-0">Deductions</h4>
+                    </div>
+                    <table class="table table-bordered mb-0">
+                        <tbody>
+                            <tr>
+                                <td>Provident Fund (PF)</td>
+                                <td class="text-end">{{ summary_data.pf|floatformat:2 }}</td>
+                            </tr>
+                            <tr>
+                                <td>ESI</td>
+                                <td class="text-end">{{ summary_data.esi|floatformat:2 }}</td>
+                            </tr>
+                            <tr class="table-danger fw-bold">
+                                <td>Total Deductions</td>
+                                <td class="text-end">{{ summary_data.total_deductions|floatformat:2 }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Net Salary -->
+        <div class="alert alert-primary mt-3 text-center">
+            <h3>Net Salary Payable: <span class="fw-bold">{{ summary_data.salary_payable|floatformat:2 }}</span></h3>
+        </div>
 
         <!-- Attendance Summary -->
         <h3 class="mt-4">Attendance Summary</h3>
@@ -117,4 +163,21 @@
 {% elif form.is_bound %}
 <p class="text-info mt-3">No attendance data found for the selected criteria.</p>
 {% endif %}
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script>
+    $(document).ready(function () {
+        $('#id_employee').select2({
+            placeholder: "Select an employee",
+            allowClear: true,
+            width: '100%'
+        });
+
+        // Add bootstrap form classes to selects if they don't have them
+        $('select').addClass('form-select');
+        // But select2 hides original select, so we style the select2 container via CSS if needed
+        // Or just let select2 default style be
+    });
+</script>
 {% endblock %}
