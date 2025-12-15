@@ -82,8 +82,6 @@ class Employee(models.Model):
     previous_experience = models.TextField(default='')
     employment_type = models.CharField(max_length=20, choices=EMPLOYMENT_TYPE_CHOICES, default='Permanent')
     basic_salary = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
-    da = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
-    hra = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     allowances = models.ManyToManyField(Allowance, through='EmployeeAllowance', blank=True)
     def __str__(self):
         return f"{self.full_name} ({self.employee_code})"

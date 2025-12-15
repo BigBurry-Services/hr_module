@@ -55,8 +55,6 @@ class EmployeeForm(forms.ModelForm):
     contact_number = forms.CharField(max_length=15, validators=[RegexValidator(r'^\d{10,15}$', message="Enter a valid contact number (10-15 digits)")])
     aadhar_number = forms.CharField(max_length=12, validators=[RegexValidator(r'^\d{12}$', message="Aadhar number must be exactly 12 digits")])
     basic_salary = forms.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
-    da = forms.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
-    hra = forms.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
     
     # User account fields
     username = forms.CharField(max_length=150, help_text="Username for employee login")
@@ -68,8 +66,7 @@ class EmployeeForm(forms.ModelForm):
             'employee_code', 'full_name', 'address', 'date_of_birth',
             'contact_number', 'aadhar_number', 'sex', 'nationality',
             'state', 'joining_date', 'department', 'designation',
-            'previous_experience', 'employment_type', 'basic_salary',
-            'da', 'hra'
+            'previous_experience', 'employment_type', 'basic_salary'
         ]
         widgets = {
             'date_of_birth': forms.DateInput(attrs={'type': 'date'}),
@@ -201,7 +198,19 @@ class SalarySummaryForm(forms.Form):
         (9, 'September'), (10, 'October'), (11, 'November'), (12, 'December')
     ]
     month = forms.ChoiceField(choices=MONTH_CHOICES)
+    year = forms.ChoiceField(choices=[])
     employee = forms.ModelChoiceField(queryset=Employee.objects.all(), required=False) # Optional employee filter
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        current_year = datetime.date.today().year
+        # Generate year choices (e.g., current year - 5 to current year + 1)
+        year_range = range(current_year - 5, current_year + 2)
+        self.fields['year'].choices = [(y, y) for y in year_range]
+        
+        # Set initial values
+        self.fields['month'].initial = datetime.date.today().month
+        self.fields['year'].initial = current_year
 
 class HRProfileForm(forms.ModelForm):
     username = forms.CharField(max_length=150)

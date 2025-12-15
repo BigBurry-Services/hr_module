@@ -24,6 +24,10 @@
                 {% endfor %}
             </select>
         </div>
+        <div style="flex: 1;">
+            <label for="search">Search</label>
+            <input type="text" name="search" id="search" value="{{ search_query }}" placeholder="Name or Code">
+        </div>
         <div style="display: flex; gap: 0.5rem;">
             <button type="submit" class="btn btn-secondary">Filter</button>
             <button type="submit" formaction="{% url 'export_attendance_csv' %}"
@@ -129,7 +133,7 @@
     <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; align-items: flex-end;">
         <div style="flex: 1; min-width: 150px;">
             <label for="time">Time *</label>
-            <input type="time" name="time" id="time" required>
+            <input type="time" name="time" id="time" value="{{ current_time }}" required>
         </div>
         <div style="flex: 2; min-width: 200px;">
             <label for="notes">Notes</label>

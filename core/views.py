@@ -367,6 +367,8 @@ def attendance_mark(request):
     # Filter variables
     selected_dept_id = request.GET.get('department')
     selected_date_str = request.GET.get('date', datetime.date.today().strftime('%Y-%m-%d'))
+    search_query = request.GET.get('search', '')
+
     try:
         selected_date = datetime.datetime.strptime(selected_date_str, '%Y-%m-%d').date()
     except ValueError:
@@ -376,6 +378,13 @@ def attendance_mark(request):
     employees = Employee.objects.all()
     if selected_dept_id:
         employees = employees.filter(department_id=selected_dept_id)
+        
+    if search_query:
+        from django.db.models import Q
+        employees = employees.filter(
+            Q(full_name__icontains=search_query) | 
+            Q(employee_code__icontains=search_query)
+        )
 
     # Pre-fetch existing attendance for the selected date to show status
     existing_attendance = Attendance.objects.filter(date=selected_date)
@@ -443,6 +452,8 @@ def attendance_mark(request):
         'attendance_map': attendance_map,
         'selected_dept_id': int(selected_dept_id) if selected_dept_id else None,
         'selected_date': selected_date_str,
+        'search_query': search_query,
+        'current_time': datetime.datetime.now().strftime('%H:%M'),
         'error_message': error_message,
         'success_message': success_message,
     }
@@ -546,13 +557,20 @@ def summary(request):
     form = SalarySummaryForm(request.POST or None)
     summary_data = None
 
+    # Helper to format seconds to HH:MM
+    def format_seconds(seconds):
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        return f"{hours:02d}:{minutes:02d}"
+
     if request.method == 'POST' and form.is_valid():
         month = int(form.cleaned_data['month'])
+        year = int(form.cleaned_data['year'])
         employee = form.cleaned_data['employee']
         action = request.POST.get('action', 'generate')
         
-        # Get the current year
-        current_year = datetime.date.today().year
+        # Use the selected year
+        current_year = year
 
         # Get the number of days in the selected month
         _, num_days = calendar.monthrange(current_year, month)
@@ -582,12 +600,8 @@ def summary(request):
         # Salary Calculation
         daily_wage = 0
         basic_salary = 0
-        da = 0
-        hra = 0
         if employee:
             basic_salary = employee.basic_salary
-            da = employee.da
-            hra = employee.hra
             daily_wage = basic_salary / 30 # Assuming 30 days
         
         salary_from_days = daily_wage * present_days
@@ -607,41 +621,158 @@ def summary(request):
                     'amount': amount
                 })
         
-        gross_salary = salary_from_days + total_allowances + da + hra
+        gross_salary = salary_from_days + total_allowances
         
         # Deductions Calculation
         pf = 0
         esi = 0
         
-        # PF Calculation: 12% of (Basic + DA)
-        # Note: Usually restricted to 15000 ceiling, but standard is 12% of basic+da
-        pf_base = salary_from_days + da  # Using earned basic
+        # PF Calculation: 12% of Earned Basic
+        # Note: Previously (Basic + DA) but DA is now just an allowance.
+        pf_base = salary_from_days
         pf = pf_base * Decimal('0.12')
         
+        # ESI Calculation: 0.75% of Gross Salary if Gross <= 21,000
+        # Check standard gross rules. Assuming monthly gross for eligibility check.
+        # Ideally, check 'full' gross vs 'earned' gross. ESI is usually on earned gross.
         # ESI Calculation: 0.75% of Gross Salary if Gross <= 21,000
         # Check standard gross rules. Assuming monthly gross for eligibility check.
         # Ideally, check 'full' gross vs 'earned' gross. ESI is usually on earned gross.
         if gross_salary <= 21000:
              esi = gross_salary * Decimal('0.0075')
         
+        # Employer Contributions (Govt Payment)
+        # Employer PF: 12% of Earned Basic
+        employer_pf = pf_base * Decimal('0.12')
+        
+        # Employer ESI: 3.25% of Earned Basic (as requested)
+        employer_esi = salary_from_days * Decimal('0.0325')
+
         total_deductions = pf + esi
         
         salary_payable = gross_salary - total_deductions
+        
+        total_pf_contribution = pf + employer_pf
+        total_esi_contribution = esi + employer_esi
+        
+        # Grand Totals for Government Payable Row
+        total_emp_share = pf + esi
+        total_employer_share = employer_pf + employer_esi
+        grand_total_gov_payable = total_emp_share + total_employer_share
 
         summary_data.update({
              'basic_salary': basic_salary,
              'earned_basic': salary_from_days,
-             'da': da,
-             'hra': hra,
              'total_allowances': total_allowances,
              'allowance_list': allowance_list,
              'gross_salary': gross_salary,
              'pf': pf,
              'esi': esi,
+             'employer_pf': employer_pf,
+             'employer_esi': employer_esi,
+             'total_pf_contribution': total_pf_contribution,
+             'total_esi_contribution': total_esi_contribution,
+             'total_emp_share': total_emp_share,
+             'total_employer_share': total_employer_share,
+             'grand_total_gov_payable': grand_total_gov_payable,
              'total_deductions': total_deductions,
              'salary_payable': salary_payable,
              'daily_wage': daily_wage,
-             'attendance_list': attendance_records.order_by('date')
+             # 'attendance_list': attendance_records.order_by('date') # Replaced by full list below
+        })
+
+        # Generate Full Attendance List (All Dates)
+        full_attendance_list = []
+        att_map = {att.date: att for att in attendance_records}
+        
+        for day in range(1, num_days + 1):
+            current_date = datetime.date(current_year, month, day)
+            record = att_map.get(current_date)
+            
+            day_data = {
+                'date': current_date,
+                'check_in_time': "Not Done",
+                'check_out_time': "Not Done",
+                'notes': "",
+                'check_in_alert': True,
+                'check_out_alert': True,
+                'working_hours': "-",
+                'overtime': "-",
+                'is_low_hours': False
+            }
+            
+            if record:
+                if record.check_in_time:
+                    day_data['check_in_time'] = record.check_in_time
+                    day_data['check_in_alert'] = False
+                
+                if record.check_out_time:
+                    day_data['check_out_time'] = record.check_out_time
+                    day_data['check_out_alert'] = False
+                
+                day_data['notes'] = record.notes if record.notes else ""
+
+                if record.check_in_time and record.check_out_time:
+                    # Calculate duration for this day
+                    check_in = datetime.datetime.combine(current_date, record.check_in_time)
+                    check_out = datetime.datetime.combine(current_date, record.check_out_time)
+                    
+                    if check_out < check_in:
+                        check_out += datetime.timedelta(days=1)
+                    
+                    duration = check_out - check_in
+                    seconds = duration.total_seconds()
+                    
+                    # Highlight if < 4 hours (14400 seconds)
+                    if seconds < 14400:
+                        day_data['is_low_hours'] = True
+                    
+                    day_data['working_hours'] = format_seconds(seconds)
+                    
+                    # Overtime > 9 hours
+                    if seconds > 32400:
+                        ot_seconds = seconds - 32400
+                        day_data['overtime'] = format_seconds(ot_seconds)
+                    else:
+                        day_data['overtime'] = "00:00"
+            
+            full_attendance_list.append(day_data)
+
+        summary_data['attendance_list'] = full_attendance_list
+
+        # Calculate Total Working Hours and Overtime
+        total_seconds_worked = 0
+        total_overtime_seconds = 0
+        
+        for record in attendance_records:
+            if record.check_in_time and record.check_out_time:
+                # Create naive datetime objects for calculation (assuming same day checkout for simplicity or handling crossing midnight if dates were available, but here we only have TimeField and DateField)
+                # Since we only have TimeField, we combine with the record's date.
+                # WARNING: This assumes checkout is on the same day. If checkout is next day (e.g. night shift), this logic needs 'next day' check.
+                # Given current models, we will assume same-day for now as is standard for basic time clocks unless specified otherwise.
+                
+                check_in = datetime.datetime.combine(record.date, record.check_in_time)
+                check_out = datetime.datetime.combine(record.date, record.check_out_time)
+                
+                if check_out < check_in:
+                     # Handle overnight shift case simply by adding a day to checkout
+                     check_out += datetime.timedelta(days=1)
+
+                duration = check_out - check_in
+                seconds = duration.total_seconds()
+                total_seconds_worked += seconds
+                
+                # Check for overtime (> 9 hours)
+                # 9 hours = 9 * 3600 = 32400 seconds
+                if seconds > 32400:
+                    overtime_seconds = seconds - 32400
+                    total_overtime_seconds += overtime_seconds
+
+
+
+        summary_data.update({
+            'total_working_hours': format_seconds(total_seconds_worked),
+            'total_overtime_hours': format_seconds(total_overtime_seconds),
         })
 
         if action == 'download_pdf':
@@ -659,33 +790,41 @@ def summary(request):
             p.drawString(100, 720, f"Employee Name: {summary_data['employee_name']}")
             p.drawString(100, 700, f"Total Working Days: {summary_data['total_working_days']}")
             p.drawString(100, 680, f"Present Days: {summary_data['total_present_days']}")
+
             p.drawString(100, 660, f"Absent Days: {summary_data['total_absent_days']}")
+            p.drawString(100, 640, f"Total Working Hours: {summary_data['total_working_hours']}")
+            p.drawString(100, 620, f"Total Overtime Hours: {summary_data['total_overtime_hours']}")
             
-            y = 630
+            y = 590
             p.setFont("Helvetica-Bold", 14)
             p.drawString(100, y, "Earnings:")
-            y -= 20
+            y -= 25
             p.setFont("Helvetica", 12)
-            p.drawString(120, y, f"Basic Salary (Earned): {summary_data['earned_basic']:.2f} (Full: {basic_salary})")
+            p.drawString(120, y, f"Basic Salary (Earned): {summary_data['earned_basic']:.2f}")
             y -= 20
-            p.drawString(120, y, f"DA: {summary_data['da']}")
-            y -= 20
-            p.drawString(120, y, f"HRA: {summary_data['hra']}")
-            y -= 20
-            p.drawString(120, y, f"Total Allowances: {summary_data['total_allowances']:.2f}")
-            y -= 20
+            
+            # Allowances
+            for allowance in summary_data['allowance_list']:
+                p.drawString(120, y, f"{allowance['name']}: {allowance['amount']:.2f}")
+                y -= 20
+
+            y -= 5
+            p.line(120, y+15, 300, y+15) # Separator
             p.setFont("Helvetica-Bold", 12)
             p.drawString(120, y, f"Gross Salary: {summary_data['gross_salary']:.2f}")
 
             y -= 40
             p.setFont("Helvetica-Bold", 14)
             p.drawString(100, y, "Deductions:")
-            y -= 20
+            y -= 25
             p.setFont("Helvetica", 12)
             p.drawString(120, y, f"PF (12%): {summary_data['pf']:.2f}")
             y -= 20
             p.drawString(120, y, f"ESI (0.75%): {summary_data['esi']:.2f}")
             y -= 20
+            
+            y -= 5
+            p.line(120, y+15, 300, y+15) # Separator
             p.setFont("Helvetica-Bold", 12)
             p.drawString(120, y, f"Total Deductions: {summary_data['total_deductions']:.2f}")
             
