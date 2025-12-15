@@ -624,29 +624,38 @@ def summary(request):
         gross_salary = salary_from_days + total_allowances
         
         # Deductions Calculation
-        pf = 0
-        esi = 0
+        # Eligibility Checks
+        # PF Eligibility: Basic <= 15,000
+        pf_eligible = basic_salary <= 15000
         
-        # PF Calculation: 12% of Earned Basic
-        # Note: Previously (Basic + DA) but DA is now just an allowance.
+        # ESI Eligibility: Basic <= 21,000
+        esi_eligible = basic_salary <= 21000
+
+        # PF Calculation: 12% of Earned Basic if Eligible
         pf_base = salary_from_days
-        pf = pf_base * Decimal('0.12')
+        if pf_eligible:
+            pf = pf_base * Decimal('0.12')
+        else:
+            pf = Decimal('0.00')
         
-        # ESI Calculation: 0.75% of Gross Salary if Gross <= 21,000
-        # Check standard gross rules. Assuming monthly gross for eligibility check.
-        # Ideally, check 'full' gross vs 'earned' gross. ESI is usually on earned gross.
-        # ESI Calculation: 0.75% of Gross Salary if Gross <= 21,000
-        # Check standard gross rules. Assuming monthly gross for eligibility check.
-        # Ideally, check 'full' gross vs 'earned' gross. ESI is usually on earned gross.
-        if gross_salary <= 21000:
+        # ESI Calculation: 0.75% of Gross Salary if Eligible
+        if esi_eligible:
              esi = gross_salary * Decimal('0.0075')
+        else:
+            esi = Decimal('0.00')
         
         # Employer Contributions (Govt Payment)
-        # Employer PF: 12% of Earned Basic
-        employer_pf = pf_base * Decimal('0.12')
+        # Employer PF: 12% of Earned Basic if Eligible
+        if pf_eligible:
+            employer_pf = pf_base * Decimal('0.12')
+        else:
+            employer_pf = Decimal('0.00')
         
-        # Employer ESI: 3.25% of Earned Basic (as requested)
-        employer_esi = salary_from_days * Decimal('0.0325')
+        # Employer ESI: 3.25% of Earned Basic (as requested) if Eligible
+        if esi_eligible:
+            employer_esi = salary_from_days * Decimal('0.0325')
+        else:
+            employer_esi = Decimal('0.00')
 
         total_deductions = pf + esi
         
@@ -663,6 +672,8 @@ def summary(request):
         summary_data.update({
              'basic_salary': basic_salary,
              'earned_basic': salary_from_days,
+             'pf_eligible': pf_eligible,
+             'esi_eligible': esi_eligible,
              'total_allowances': total_allowances,
              'allowance_list': allowance_list,
              'gross_salary': gross_salary,

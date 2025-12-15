@@ -113,11 +113,25 @@
                         <tbody>
                             <tr>
                                 <td>Provident Fund (PF)</td>
-                                <td class="text-end">{{ summary_data.pf|floatformat:2 }}</td>
+                                <td class="text-end">
+                                    {% if summary_data.pf_eligible %}
+                                    {{ summary_data.pf|floatformat:2 }}
+                                    {% else %}
+                                    <span class="badge bg-secondary">Not Eligible</span>
+                                    {{ 0|floatformat:2 }}
+                                    {% endif %}
+                                </td>
                             </tr>
                             <tr>
                                 <td>ESI</td>
-                                <td class="text-end">{{ summary_data.esi|floatformat:2 }}</td>
+                                <td class="text-end">
+                                    {% if summary_data.esi_eligible %}
+                                    {{ summary_data.esi|floatformat:2 }}
+                                    {% else %}
+                                    <span class="badge bg-secondary">Not Eligible</span>
+                                    {{ 0|floatformat:2 }}
+                                    {% endif %}
+                                </td>
                             </tr>
                             <tr style="background-color: #f8d7da; font-weight: bold;">
                                 <td>Total Deductions</td>
@@ -148,15 +162,39 @@
                     <tbody>
                         <tr>
                             <td>Provident Fund (PF)</td>
-                            <td class="text-end">{{ summary_data.pf|floatformat:2 }}</td>
-                            <td class="text-end">{{ summary_data.employer_pf | floatformat:2 }}</td>
+                            <td class="text-end">
+                                {% if summary_data.pf_eligible %}
+                                {{ summary_data.pf|floatformat:2 }}
+                                {% else %}
+                                <span class="badge bg-secondary">Not Eligible</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                {% if summary_data.pf_eligible %}
+                                {{ summary_data.employer_pf | floatformat:2 }}
+                                {% else %}
+                                <span class="badge bg-secondary">Not Eligible</span>
+                                {% endif %}
+                            </td>
                             <td class="text-end"><strong>{{ summary_data.total_pf_contribution|floatformat:2 }}</strong>
                             </td>
                         </tr>
                         <tr>
                             <td>ESI</td>
-                            <td class="text-end">{{ summary_data.esi|floatformat:2 }}</td>
-                            <td class="text-end">{{ summary_data.employer_esi|floatformat:2 }}</td>
+                            <td class="text-end">
+                                {% if summary_data.esi_eligible %}
+                                {{ summary_data.esi|floatformat:2 }}
+                                {% else %}
+                                <span class="badge bg-secondary">Not Eligible</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                {% if summary_data.esi_eligible %}
+                                {{ summary_data.employer_esi|floatformat:2 }}
+                                {% else %}
+                                <span class="badge bg-secondary">Not Eligible</span>
+                                {% endif %}
+                            </td>
                             <td class="text-end"><strong>{{ summary_data.total_esi_contribution|floatformat:2}}</strong>
                             </td>
                         </tr>
