@@ -7,14 +7,16 @@ from django.contrib.auth.decorators import login_required
 import datetime
 import calendar
 import csv
-from .models import Employee, Attendance, HRProfile, Department, Designation, Allowance, AttendanceDevice, EmployeeAllowance
+from .models import Employee, Attendance, HRProfile, Department, Designation, Allowance, AttendanceDevice, EmployeeAllowance, Holiday, Leave, SalaryAdvance
 from django.contrib.auth.models import User
 from django.db import transaction
-from .forms import EmployeeForm, AttendanceForm, SalarySummaryForm, RegistrationForm, DepartmentForm, DesignationForm, AllowanceForm, AttendanceDeviceForm, EmployeeAllowanceFormSet, EmployeeAllowanceForm, HRProfileForm
+from .forms import EmployeeForm, AttendanceForm, SalarySummaryForm, RegistrationForm, DepartmentForm, DesignationForm, AllowanceForm, AttendanceDeviceForm, EmployeeAllowanceFormSet, EmployeeAllowanceForm, HRProfileForm, HolidayForm, LeaveForm, SalaryAdvanceForm
 from django.http import JsonResponse
 from .utils import DeviceSyncService
 from .decorators import hr_required, admin_required
 from decimal import Decimal
+from django.db.models import Sum
+
 
 @hr_required
 def allowance_list(request):
@@ -1037,3 +1039,194 @@ def toggle_user_status(request, pk):
         messages.success(request, f"User {user.username} has been {status}.")
     
     return redirect('manage_hrs')
+
+@hr_required
+def leave_calendar(request):
+    current_year = datetime.date.today().year
+    current_month = datetime.date.today().month
+    
+    month_param = request.GET.get('month')
+    year_param = request.GET.get('year')
+    
+    if month_param:
+        current_month = int(month_param)
+    if year_param:
+        current_year = int(year_param)
+        
+    holidays = Holiday.objects.filter(date__year=current_year, date__month=current_month)
+    holiday_map = {h.date.day: h for h in holidays}
+    
+    cal = calendar.monthcalendar(current_year, current_month)
+    
+    context = {
+        'calendar': cal,
+        'current_month': current_month,
+        'current_year': current_year,
+        'month_name': calendar.month_name[current_month],
+        'holiday_map': holiday_map,
+        'years': range(current_year - 2, current_year + 3),
+        'months': list(enumerate(calendar.month_name))[1:]
+    }
+    return render(request, 'core/leave_calendar.html', context)
+
+@hr_required
+def toggle_holiday(request):
+    import json
+    if request.method == 'POST':
+        try:
+             data = json.loads(request.body)
+             date_str = data.get('date')
+             date_obj = datetime.datetime.strptime(date_str, '%Y-%m-%d').date()
+             # Toggle
+             holiday = Holiday.objects.filter(date=date_obj).first()
+             if holiday:
+                 holiday.delete()
+                 status = 'removed'
+             else:
+                 Holiday.objects.create(date=date_obj, description="Holiday")
+                 status = 'added'
+             return JsonResponse({'status': 'success', 'action': status})
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)})
+    return JsonResponse({'status': 'error'})
+
+@hr_required
+def leave_list(request):
+    leaves = Leave.objects.all().order_by('-start_date')
+    employees = Employee.objects.all()
+    
+    if request.method == 'POST':
+        form = LeaveForm(request.POST)
+        employee_id = request.POST.get('employee')
+        if form.is_valid() and employee_id:
+            leave = form.save(commit=False)
+            leave.employee_id = employee_id
+            leave.status = 'Approved'
+            leave.save()
+            messages.success(request, "Leave added successfully")
+            return redirect('leave_list')
+        elif not employee_id:
+             messages.error(request, "Please select an employee")
+    else:
+        form = LeaveForm()
+
+    return render(request, 'core/leave_list.html', {'leaves': leaves, 'employees': employees, 'form': form})
+
+@hr_required
+def salary_advance_list(request):
+    advances = SalaryAdvance.objects.all().order_by('-date')
+    employees = Employee.objects.all()
+    
+    if request.method == 'POST':
+        form = SalaryAdvanceForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Salary Advance added successfully")
+            return redirect('salary_advance_list')
+    else:
+        form = SalaryAdvanceForm()
+        
+    return render(request, 'core/salary_advance_list.html', {'advances': advances, 'employees': employees, 'form': form})
+
+@hr_required
+def monthly_salary_report(request):
+    current_date = datetime.date.today()
+    selected_month = int(request.GET.get('month', current_date.month))
+    selected_year = int(request.GET.get('year', current_date.year))
+    
+    _, num_days = calendar.monthrange(selected_year, selected_month)
+    start_date = datetime.date(selected_year, selected_month, 1)
+    end_date = datetime.date(selected_year, selected_month, num_days)
+    
+    holidays_count = Holiday.objects.filter(date__range=[start_date, end_date]).count()
+    working_days_in_month = num_days - holidays_count
+    if working_days_in_month <= 0: working_days_in_month = 1
+    
+    employees = Employee.objects.all()
+    report_data = []
+    
+    for emp in employees:
+        present_days = Attendance.objects.filter(employee=emp, date__range=[start_date, end_date]).count()
+        leaves = Leave.objects.filter(employee=emp, start_date__lte=end_date, end_date__gte=start_date, status='Approved')
+        
+        unpaid_leave_days = 0
+        total_leave_days = 0 
+        for leave in leaves:
+            l_start = max(leave.start_date, start_date)
+            l_end = min(leave.end_date, end_date)
+            days = (l_end - l_start).days + 1
+            if days > 0:
+                total_leave_days += days
+                if leave.leave_type == 'Unpaid':
+                    unpaid_leave_days += days
+        
+        basic = emp.basic_salary
+        if not basic: basic = Decimal(0)
+        daily_rate = basic / Decimal(working_days_in_month)
+        
+        # Overtime
+        att_records = Attendance.objects.filter(employee=emp, date__range=[start_date, end_date])
+        overtime_seconds = 0
+        for att in att_records:
+             if att.check_in_time and att.check_out_time:
+                 check_in = datetime.datetime.combine(att.date, att.check_in_time)
+                 check_out = datetime.datetime.combine(att.date, att.check_out_time)
+                 if check_out < check_in: check_out += datetime.timedelta(days=1)
+                 duration = (check_out - check_in).total_seconds()
+                 if duration > 32400: # > 9 hours
+                     overtime_seconds += (duration - 32400)
+                     
+        overtime_hours = Decimal(overtime_seconds) / Decimal(3600)
+        ot_amount = (daily_rate / Decimal(9)) * overtime_hours
+        
+        # Absent calc
+        absent_days = working_days_in_month - present_days - total_leave_days
+        if absent_days < 0: absent_days = 0
+        
+        leave_cut_amount = unpaid_leave_days * daily_rate
+        absent_deduction = absent_days * daily_rate
+        
+        total_allowances = sum([ea.amount for ea in emp.employeeallowance_set.all()])
+        gross_salary = basic + total_allowances + ot_amount
+        
+        pf = Decimal(0)
+        esi = Decimal(0)
+        
+        earned_basic = basic - leave_cut_amount - absent_deduction
+        if earned_basic < 0: earned_basic = Decimal(0)
+        
+        if basic <= 15000:
+             pf = earned_basic * Decimal('0.12')
+        if basic <= 21000:
+             esi = gross_salary * Decimal('0.0075')
+
+        advances_total = SalaryAdvance.objects.filter(employee=emp, date__range=[start_date, end_date]).aggregate(sum=Sum('amount'))['sum'] or 0
+        
+        total_deductions = pf + esi + leave_cut_amount + absent_deduction + advances_total
+        net_salary = gross_salary - pf - esi - leave_cut_amount - absent_deduction - advances_total
+        
+        report_data.append({
+            'code': emp.employee_code,
+            'name': emp.full_name,
+            'doj': emp.joining_date,
+            'basic': basic,
+            'allowances': total_allowances,
+            'overtime_hours': round(overtime_hours, 1),
+            'overtime_amount': round(ot_amount, 2),
+            'salary_advance': advances_total,
+            'esic': round(esi, 2),
+            'pf': round(pf, 2),
+            'leaves': total_leave_days,
+            'leave_cut_amount': round(leave_cut_amount + absent_deduction, 2),
+            'total_salary': round(gross_salary, 2),
+            'net_salary': round(net_salary, 2)
+        })
+
+    context = {
+        'report_data': report_data,
+        'selected_month': selected_month,
+        'selected_year': selected_year,
+        'months': list(enumerate(calendar.month_name))[1:],
+        'years': range(current_date.year - 2, current_date.year + 3)
+    }
+    return render(request, 'core/monthly_salary_report.html', context)

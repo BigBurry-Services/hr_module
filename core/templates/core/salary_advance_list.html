@@ -1,0 +1,59 @@
+{% extends 'core/dashboard_base.html' %}
+{% block page_title %}Salary Advances{% endblock %}
+{% block dashboard_content %}
+<div class="row">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-warning text-dark">Record Advance</div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    {% for field in form %}
+                    <div class="form-group mb-3">
+                        <label>{{ field.label }}</label>
+                        {{ field }}
+                        {% for error in field.errors %}
+                        <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    {% endfor %}
+                    <button type="submit" class="btn btn-warning btn-block w-100">Save Advance</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">Advance History</div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Employee</th>
+                                <th>Date</th>
+                                <th>Amount</th>
+                                <th>Reason</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for adv in advances %}
+                            <tr>
+                                <td>{{ adv.employee.full_name }}</td>
+                                <td>{{ adv.date|date:"d M Y" }}</td>
+                                <td>{{ adv.amount }}</td>
+                                <td>{{ adv.reason }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="4">No advances recorded.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

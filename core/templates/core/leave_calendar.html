@@ -1,0 +1,107 @@
+{% extends 'core/dashboard_base.html' %}
+{% block page_title %}Leave Calendar (Holidays){% endblock %}
+{% block dashboard_content %}
+<style>
+    .calendar-day {
+        height: 100px;
+        vertical-align: top;
+        cursor: pointer;
+        transition: 0.2s;
+    }
+
+    .calendar-day:hover {
+        background-color: #f0f0f0;
+    }
+
+    .is-holiday {
+        background-color: #ffeaea;
+        border: 1px solid #ffcdd2;
+    }
+
+    .text-holiday {
+        color: #e53935;
+        font-weight: bold;
+    }
+</style>
+<div class="card">
+    <div class="card-header">
+        <div class="d-flex justify-content-between align-items-center"
+            style="display: flex; justify-content: space-between;">
+            <h4 style="margin: 0;">{{ month_name }} {{ current_year }}</h4>
+            <div>
+                {% with prev_m=current_month|add:"-1" next_m=current_month|add:"1" %}
+                <!-- Simple links, logic handled in view for year rollover if needed or just 1-12 loop -->
+                <!-- View handled params year/month. View passed lists for dropdowns or we use links. -->
+                <!-- Links need logic for year rollover. -->
+                <!-- Simplification: Use dropdowns or just basic prev/next without year rollover for now -->
+                <!-- Or specific links if year changes. -->
+                <!-- Let's use simple query params, view logic creates context 'prev_month_url' etc is better but -->
+                <!-- I'll use simple JS or links assuming valid range for task or user navigation -->
+                <a href="?month={{ current_month|add:'-1' }}&year={{ current_year }}"
+                    class="btn btn-sm btn-outline-primary">&laquo; Prev</a>
+                <a href="?month={{ current_month|add:'1' }}&year={{ current_year }}"
+                    class="btn btn-sm btn-outline-primary">Next &raquo;</a>
+                {% endwith %}
+            </div>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-info">Click on a date to toggle Holiday status (e.g. Sundays).</div>
+        <table class="table table-bordered">
+            <thead>
+                <tr>
+                    <th style="width: 14.28%">Mon</th>
+                    <th style="width: 14.28%">Tue</th>
+                    <th style="width: 14.28%">Wed</th>
+                    <th style="width: 14.28%">Thu</th>
+                    <th style="width: 14.28%">Fri</th>
+                    <th style="width: 14.28%">Sat</th>
+                    <th style="width: 14.28%">Sun</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for week in calendar %}
+                <tr>
+                    {% for day in week %}
+                    {% if day == 0 %}
+                    <td class="bg-light"></td>
+                    {% else %}
+                    <!-- Manual check for holiday in map -->
+                    <!-- Accessing dict by key in Django template: use a custom filter or 'if day in map' -->
+                    <td class="calendar-day {% if day in holiday_map %}is-holiday{% endif %}"
+                        onclick="toggleHoliday('{{ current_year }}-{{ current_month }}-{{ day }}')">
+                        <div style="display: flex; justify-content: space-between;">
+                            <strong>{{ day }}</strong>
+                            {% if day in holiday_map %}
+                            <span class="badge badge-danger">Holiday</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    {% endif %}
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+<script>
+    function toggleHoliday(dateStr) {
+        // Simple confirmation
+        if (!confirm('Toggle holiday for ' + dateStr + '?')) return;
+
+        // Using fetch
+        fetch('{% url "toggle_holiday" %}', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ date: dateStr })
+        }).then(r => r.json()).then(data => {
+            if (data.status === 'success') location.reload();
+            else alert('Error: ' + (data.message || 'Unknown error'));
+        }).catch(e => alert('Network error'));
+    }
+</script>
+{% endblock %}

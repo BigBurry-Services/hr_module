@@ -1,9 +1,9 @@
 {% extends 'core/dashboard_base.html' %}
 {% load static %}
 
-{% block dashboard_title %}Salary Summary{% endblock %}
+{% block dashboard_title %}Summary{% endblock %}
 
-{% block page_title %}Salary Summary{% endblock %}
+{% block page_title %}Summary{% endblock %}
 
 {% block dashboard_content %}
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
@@ -41,7 +41,17 @@
     }
 </style>
 
+<ul class="nav nav-tabs mb-4">
+    <li class="nav-item">
+        <a class="nav-link active" aria-current="page" href="#">Individual Summary</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" href="{% url 'monthly_salary_report' %}">Monthly Report (All Employees)</a>
+    </li>
+</ul>
+
 <form method="post" class="card">
+
     {% csrf_token %}
     <div class="mb-3">
         <label for="id_month" class="form-label">Month</label>

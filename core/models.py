@@ -119,3 +119,39 @@ class AttendanceDevice(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.ip_address})"
+
+class Holiday(models.Model):
+    date = models.DateField(unique=True)
+    description = models.CharField(max_length=255)
+
+    def __str__(self):
+        return f"{self.date} - {self.description}"
+
+class Leave(models.Model):
+    LEAVE_TYPE_CHOICES = [
+        ('Paid', 'Paid'),
+        ('Unpaid', 'Unpaid'),
+    ]
+    STATUS_CHOICES = [
+        ('Pending', 'Pending'),
+        ('Approved', 'Approved'),
+        ('Rejected', 'Rejected'),
+    ]
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
+    start_date = models.DateField()
+    end_date = models.DateField()
+    leave_type = models.CharField(max_length=20, choices=LEAVE_TYPE_CHOICES)
+    reason = models.TextField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Pending')
+
+    def __str__(self):
+        return f"{self.employee.full_name} - {self.leave_type} ({self.start_date} to {self.end_date})"
+
+class SalaryAdvance(models.Model):
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
+    date = models.DateField()
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    reason = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.employee.full_name} - {self.amount} on {self.date}"

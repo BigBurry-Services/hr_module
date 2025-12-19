@@ -54,5 +54,14 @@ urlpatterns = [
     path('attendance/export/', views.export_attendance_csv, name='export_attendance_csv'),
 
     # Summary URL
+    # Summary URL
     path('summary/', views.summary, name='summary'),
+    
+    # Leaves & Reports
+    path('leaves/calendar/', views.leave_calendar, name='leave_calendar'),
+    path('leaves/toggle-holiday/', views.toggle_holiday, name='toggle_holiday'),
+    path('leaves/list/', views.leave_list, name='leave_list'),
+    path('salary/advance/', views.salary_advance_list, name='salary_advance_list'),
+    path('salary/monthly-report/', views.monthly_salary_report, name='monthly_salary_report'),
 ]
+

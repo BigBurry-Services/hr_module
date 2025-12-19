@@ -1,5 +1,5 @@
 from django import forms
-from .models import Employee, Attendance, Department, Designation, Allowance, AttendanceDevice, EmployeeAllowance, HRProfile
+from .models import Employee, Attendance, Department, Designation, Allowance, AttendanceDevice, EmployeeAllowance, HRProfile, Holiday, Leave, SalaryAdvance
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
 from django.core.validators import MinLengthValidator, MinValueValidator, RegexValidator
@@ -228,3 +228,36 @@ class HRProfileForm(forms.ModelForm):
             self.fields['email'].initial = self.instance.user.email
             self.fields['password'].help_text = "Leave blank to keep current password"
         self.fields['role'].label = "User Role"
+
+class HolidayForm(forms.ModelForm):
+    class Meta:
+        model = Holiday
+        fields = ['date', 'description']
+        widgets = {
+            'date': forms.DateInput(attrs={'type': 'date'}),
+        }
+
+class LeaveForm(forms.ModelForm):
+    class Meta:
+        model = Leave
+        fields = ['start_date', 'end_date', 'leave_type', 'reason']
+        widgets = {
+            'start_date': forms.DateInput(attrs={'type': 'date'}),
+            'end_date': forms.DateInput(attrs={'type': 'date'}),
+        }
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        start = cleaned_data.get('start_date')
+        end = cleaned_data.get('end_date')
+        if start and end and end < start:
+            raise ValidationError("End date cannot be before start date.")
+        return cleaned_data
+
+class SalaryAdvanceForm(forms.ModelForm):
+    class Meta:
+        model = SalaryAdvance
+        fields = ['employee', 'date', 'amount', 'reason']
+        widgets = {
+            'date': forms.DateInput(attrs={'type': 'date'}),
+        }
