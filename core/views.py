@@ -686,12 +686,33 @@ def summary(request):
         holiday_set = {h.date for h in holidays_qs}
         holiday_map = {h.date: h.description for h in holidays_qs}
         
-        # Calculate Paid Days (Union of Attendance and Holidays)
-        att_dates = set(attendance_records.values_list('date', flat=True))
-        paid_dates = att_dates.union(holiday_set)
+        # Calculate Valid Attendance Records (non-zero duration)
+        valid_attendance_records = []
+        for att in attendance_records:
+            if att.check_in_time and att.check_out_time:
+                check_in = datetime.datetime.combine(att.date, att.check_in_time)
+                check_out = datetime.datetime.combine(att.date, att.check_out_time)
+                if check_out < check_in: check_out += datetime.timedelta(days=1)
+                if (check_out - check_in).total_seconds() > 0:
+                    valid_attendance_records.append(att)
+
+        att_dates = {att.date for att in valid_attendance_records}
+        
+        # Fetch Paid Leave Dates
+        paid_leave_dates = set()
+        # We need to fetch leaves before this block or re-fetch
+        paid_leaves_qs = Leave.objects.filter(employee=employee, start_date__lte=end_date, end_date__gte=start_date, status='Approved', leave_type='Paid')
+        for l in paid_leaves_qs:
+            c = max(l.start_date, start_date)
+            e = min(l.end_date, end_date)
+            while c <= e:
+                paid_leave_dates.add(c)
+                c += datetime.timedelta(days=1)
+
+        paid_dates = att_dates.union(holiday_set).union(paid_leave_dates)
         paid_days_count = len(paid_dates)
         
-        present_days = attendance_records.count() # Physical presence
+        present_days = len(valid_attendance_records) # Physical presence (non-zero duration)
         
         # Salary Calculation
         daily_wage = 0
@@ -1550,60 +1571,134 @@ def monthly_salary_report(request):
         present_days = Attendance.objects.filter(employee=emp, date__range=[start_date, end_date]).count()
         leaves = Leave.objects.filter(employee=emp, start_date__lte=end_date, end_date__gte=start_date, status='Approved')
         
+        # Calculate Leave Days excluding Holidays
         unpaid_leave_days = 0
         total_leave_days = 0 
         for leave in leaves:
             l_start = max(leave.start_date, start_date)
             l_end = min(leave.end_date, end_date)
-            days = (l_end - l_start).days + 1
-            if days > 0:
-                total_leave_days += days
-                if leave.leave_type == 'Unpaid':
-                    unpaid_leave_days += days
+            
+            # Iterate through each day of the leave
+            curr_date = l_start
+            while curr_date <= l_end:
+                # Only count as leave if it's NOT a holiday
+                if curr_date not in holiday_set:
+                    total_leave_days += 1
+                    if leave.leave_type == 'Unpaid':
+                        unpaid_leave_days += 1
+                curr_date += datetime.timedelta(days=1)
         
         basic = emp.basic_salary
         if not basic: basic = Decimal(0)
         # Standardize on Basic / 30
         daily_rate = basic / Decimal(30)
-
-
         
-        # Overtime
+        # Overtime & Presence Calculation
         att_records = Attendance.objects.filter(employee=emp, date__range=[start_date, end_date])
-        overtime_seconds = 0
-        for att in att_records:
-             if att.check_in_time and att.check_out_time:
-                 check_in = datetime.datetime.combine(att.date, att.check_in_time)
-                 check_out = datetime.datetime.combine(att.date, att.check_out_time)
-                 if check_out < check_in: check_out += datetime.timedelta(days=1)
-                 raw_duration = (check_out - check_in).total_seconds()
-                 
-                 # Deduct 1 hour lunch UNLESS no_break
-                 deduction = 3600
-                 if att.no_break:
-                     deduction = 0
-                     
-                 duration = raw_duration - deduction
-                 if duration < 0: duration = 0
-                 
-                 # Overtime > 8 hours (28800)
-                 if att.date in holiday_set:
-                     overtime_seconds += duration
-                 elif duration > 28800: 
-                     overtime_seconds += (duration - 28800)
-                     
-        overtime_hours = Decimal(overtime_seconds) / Decimal(3600)
-        # OT Amount: Daily / 8 (Net) * Hours
-        ot_amount = (daily_rate / Decimal(8)) * overtime_hours
+        # Total Seconds Calculation - Aligned with Summary View Logic (Lines 930-1060)
+        total_regular_seconds = 0
+        total_overtime_seconds = 0
         
-        # Absent calc
-        absent_days = working_days_in_month - present_days - total_leave_days
+        # Pre-fetch attendance map for O(1) lookup
+        att_map = {}
+        for att in att_records:
+            att_map[att.date] = att
+
+        # Pre-fetch leave map
+        leave_map = {}
+        # Fetch leaves again to be sure (or use existing 'leaves' qs)
+        for leaves_req in leaves:
+             # Iterate days
+             c = max(leaves_req.start_date, start_date)
+             e = min(leaves_req.end_date, end_date)
+             current = c
+             while current <= e:
+                 leave_map[current] = leaves_req.leave_type
+                 current += datetime.timedelta(days=1)
+
+        # Iterate all days in month
+        current_iter_date = start_date
+        present_on_working_days = 0
+        
+        while current_iter_date <= end_date:
+            day_record = att_map.get(current_iter_date)
+            is_present = False
+            
+            if day_record and day_record.check_in_time and day_record.check_out_time:
+                 # Check valid duration
+                 check_in = datetime.datetime.combine(current_iter_date, day_record.check_in_time)
+                 check_out = datetime.datetime.combine(current_iter_date, day_record.check_out_time)
+                 if check_out < check_in: check_out += datetime.timedelta(days=1)
+                 
+                 raw_seconds = (check_out - check_in).total_seconds()
+                 if raw_seconds > 0:
+                     is_present = True
+                     
+                     # Count for Absent Deduction (Present on Working Day)
+                     if current_iter_date not in holiday_set:
+                         present_on_working_days += 1
+                     
+                     deduction = 3600
+                     if day_record.no_break: deduction = 0
+                     
+                     seconds = raw_seconds - deduction
+                     if seconds < 0: seconds = 0
+                     
+                     if current_iter_date in holiday_set:
+                         # Worked on Holiday
+                         # Regular = 8h Entitlement, Overtime = Worked Duration
+                         total_regular_seconds += 28800
+                         total_overtime_seconds += seconds
+                     else:
+                         # Regular Day
+                         if seconds > 28800:
+                             total_regular_seconds += 28800
+                             total_overtime_seconds += (seconds - 28800)
+                         else:
+                             total_regular_seconds += seconds
+
+            if not is_present:
+                 # Check Leave
+                 if current_iter_date in leave_map:
+                     l_type = leave_map[current_iter_date]
+                     if l_type == 'Paid':
+                         total_regular_seconds += 28800
+                         
+                 # Check Holiday (Only if not Leave - usually Leave takes precedence or overlapping doesn't matter for Paid)
+                 # Summary View Logic (Line 1044): elif current_date in holiday_map
+                 # Meaning: If Leave (Paid/Unpaid), we processed it. If NOT Leave, check Holiday.
+                 # Wait. Summary logic (Line 1024): if not is_present: Check Leave. elif Holiday.
+                 # So Leave overrides Holiday.
+                 elif current_iter_date in holiday_set:
+                     total_regular_seconds += 28800
+            
+            current_iter_date += datetime.timedelta(days=1)
+
+        total_seconds_worked = total_regular_seconds + total_overtime_seconds
+        working_hours_decimal = total_seconds_worked / 3600.0
+        wh_hours = int(working_hours_decimal)
+        wh_minutes = int((working_hours_decimal - wh_hours) * 60)
+        total_working_hours_str = f"{wh_hours:02d}:{wh_minutes:02d}"
+        
+        # Update OT and OT Amount to use these totals if needed? 
+        # User requested 'Total Working Hours' match. 
+        # The Report also displays 'OT Hours'. 
+        # Summary View 'OT Hours' comes from 'total_overtime_seconds'.
+        # So Report OT should also match this loop.
+        overtime_hours = Decimal(total_overtime_seconds) / Decimal(3600)
+        ot_amount = (daily_rate / Decimal(8)) * overtime_hours
+                     
+        
+        # Absent calc: Working Days - Present Days (Excl Holidays) - Leave Days (Excl Holidays)
+        absent_days = working_days_in_month - present_on_working_days - total_leave_days
         if absent_days < 0: absent_days = 0
         
         leave_cut_amount = unpaid_leave_days * daily_rate
         absent_deduction = absent_days * daily_rate
         
         total_allowances = sum([ea.amount for ea in emp.employeeallowance_set.all()])
+        
+        # Gross Salary = Basic + Allowances + OT Amount
         gross_salary = basic + total_allowances + ot_amount
         
         pf = Decimal(0)
@@ -1614,13 +1709,17 @@ def monthly_salary_report(request):
         
         if basic <= 15000:
              pf = earned_basic * Decimal('0.12')
+        
         if basic <= 21000:
              esi = gross_salary * Decimal('0.0075')
 
         advances_total = SalaryAdvance.objects.filter(employee=emp, date__range=[start_date, end_date]).aggregate(sum=Sum('amount'))['sum'] or 0
         
+        # Total Deductions
         total_deductions = pf + esi + leave_cut_amount + absent_deduction + advances_total
-        net_salary = gross_salary - pf - esi - leave_cut_amount - absent_deduction - advances_total
+        
+        # Net Salary
+        net_salary = gross_salary - total_deductions
         
         report_data.append({
             'code': emp.employee_code,
@@ -1633,8 +1732,10 @@ def monthly_salary_report(request):
             'salary_advance': advances_total,
             'esic': round(esi, 2),
             'pf': round(pf, 2),
-            'leaves': total_leave_days,
+            # Leaves = Unpaid Leaves + Absent Days
+            'leaves': unpaid_leave_days + absent_days,
             'leave_cut_amount': round(leave_cut_amount + absent_deduction, 2),
+            'working_hours': total_working_hours_str,
             'total_salary': round(gross_salary, 2),
             'net_salary': round(net_salary, 2)
         })

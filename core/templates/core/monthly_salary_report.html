@@ -152,6 +152,7 @@
                         <th>DOJ</th>
                         <th>Basic</th>
                         <th>Allowances</th>
+                        <th>Wrk Hrs</th>
                         <th>OT (Hrs)</th>
                         <th>OT Amt</th>
                         <th>Advance</th>
@@ -171,6 +172,7 @@
                         <td>{{ row.doj|date:"d-M-Y" }}</td>
                         <td class="num-cell">{{ row.basic }}</td>
                         <td class="num-cell">{{ row.allowances }}</td>
+                        <td class="num-cell">{{ row.working_hours }}</td>
                         <td class="num-cell">{{ row.overtime_hours }}</td>
                         <td class="num-cell">{{ row.overtime_amount }}</td>
                         <td class="num-cell">{{ row.salary_advance }}</td>
@@ -183,7 +185,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="14" class="text-center p-3">No data found for this month.</td>
+                        <td colspan="15" class="text-center p-3">No data found for this month.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
