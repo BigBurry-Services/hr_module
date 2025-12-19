@@ -1,4 +1,5 @@
 from django.shortcuts import render, redirect, get_object_or_404
+from django.urls import reverse
 from django.contrib import messages
 from django.http import HttpResponse
 from django.contrib.auth import authenticate, login, logout
@@ -467,14 +468,23 @@ def attendance_mark(request):
             else:
                 success_message = f"Successfully checked out {count} employee(s)."
         
-        # Refresh attendance map after changes
-        existing_attendance = Attendance.objects.filter(date=selected_date)
-        attendance_map = {att.employee_id: att for att in existing_attendance}
+        # Get Attendance Map
+    existing_attendance = Attendance.objects.filter(date=selected_date)
+    attendance_map = {att.employee_id: att for att in existing_attendance}
+
+    # Get Leave Map
+    existing_leaves = Leave.objects.filter(start_date__lte=selected_date, end_date__gte=selected_date)
+    leave_map = {leave.employee_id: leave for leave in existing_leaves}
+
+    # Get Leave Types
+    leave_types = LeaveType.objects.all()
 
     context = {
         'departments': departments,
         'employees': employees,
         'attendance_map': attendance_map,
+        'leave_map': leave_map,
+        'leave_types': leave_types,
         'selected_dept_id': int(selected_dept_id) if selected_dept_id else None,
         'selected_date': selected_date_str,
         'search_query': search_query,
@@ -483,6 +493,65 @@ def attendance_mark(request):
         'success_message': success_message,
     }
     return render(request, 'core/attendance_mark.html', context)
+
+@hr_required
+def mark_single_leave(request, employee_id):
+    if request.method == 'POST':
+        try:
+            employee = get_object_or_404(Employee, pk=employee_id)
+            date_str = request.POST.get('date')
+            date_obj = datetime.datetime.strptime(date_str, '%Y-%m-%d').date()
+            
+            # Check if attendance exists
+            if Attendance.objects.filter(employee=employee, date=date_obj).exists():
+                messages.error(request, f"Cannot mark leave. Employee {employee.full_name} is marked present.")
+                return redirect(f"{reverse('attendance_mark')}?date={date_str}")
+
+            # Check if leave already exists
+            if Leave.objects.filter(employee=employee, start_date__lte=date_obj, end_date__gte=date_obj).exists():
+                messages.warning(request, f"Employee {employee.full_name} is already on leave.")
+                return redirect(f"{reverse('attendance_mark')}?date={date_str}")
+            
+            # Get Selected Leave Type
+            # The input name is dynamic: leave_type_{employee_id}
+            selected_type_id = request.POST.get(f'leave_type_{employee.id}')
+            
+            leave_category = "Paid" # Default
+            reason = "Marked by HR"
+            
+            if selected_type_id == 'unpaid':
+                 leave_category = "Unpaid"
+                 reason = "Unpaid Leave - Marked by HR"
+                 # We don't link a LeaveType for purely ad-hoc unpaid leave unless needed, 
+                 # or we could make a dummy 'Unpaid' LeaveType. 
+                 # For now, we just set the category.
+            elif selected_type_id:
+                 try:
+                     lt = LeaveType.objects.get(pk=selected_type_id)
+                     reason = f"{lt.name} - Marked by HR"
+                     # Logic to determine if it's Paid/Unpaid based on LeaveType properties could go here
+                     # For now assuming defined types are Paid unless specified otherwise
+                 except LeaveType.DoesNotExist:
+                     pass
+            else:
+                 # Default fallback if nothing selected
+                 leave_category = "Paid" 
+                 reason = "Casual Leave - Marked by HR"
+
+            Leave.objects.create(
+                employee=employee,
+                start_date=date_obj,
+                end_date=date_obj,
+                leave_type=leave_category,
+                reason=reason,
+                status='Approved'
+            )
+            messages.success(request, f"Leave marked for {employee.full_name}.")
+        except Exception as e:
+            messages.error(request, f"Error marking leave: {e}")
+            
+        return redirect(f"{reverse('attendance_mark')}?date={request.POST.get('date', '')}")
+    return redirect('attendance_mark')
 
 @login_required
 def attendance_edit(request, pk):
@@ -947,10 +1016,46 @@ def sync_attendance_view(request):
             service = DeviceSyncService()
             results = service.sync_devices(target_date=target_date)
             
+            # Auto-Absent Logic for Past Dates
+            today = datetime.date.today()
+            processed_absent = 0
+            if target_date < today:
+                # Ensure 'Absent' leave type exists
+                absent_type, _ = LeaveType.objects.get_or_create(name="Absent", defaults={'days_allowed': 0})
+                
+                all_employees = Employee.objects.all()
+                for emp in all_employees:
+                    # Check if they have attendance
+                    has_attendance = Attendance.objects.filter(employee=emp, date=target_date).exists()
+                    if has_attendance:
+                        continue
+                        
+                    # Check if they already have leave
+                    has_leave = Leave.objects.filter(employee=emp, start_date__lte=target_date, end_date__gte=target_date).exists()
+                    if has_leave:
+                        continue
+                    
+                    # Create Absent Record
+                    try:
+                        Leave.objects.create(
+                            employee=emp,
+                            start_date=target_date,
+                            end_date=target_date,
+                            leave_type="Unpaid", # Absent is usually unpaid
+                            reason="Auto-marked Absent (No Punch Record)",
+                            status='Approved'
+                        )
+                        processed_absent += 1
+                    except Exception as e:
+                        print(f"Failed to auto-mark absent for {emp}: {e}")
+                
+                if processed_absent > 0:
+                    results['message'] = results.get('message', '') + f" Also marked {processed_absent} employees as Absent."
+
             if results['errors']:
                 return JsonResponse({'status': 'warning', 'message': 'Sync completed with errors.', 'details': results}, status=200)
             
-            return JsonResponse({'status': 'success', 'message': f"Successfully processed {results['processed_count']} records from {results['devices_connected']} devices."}, status=200)
+            return JsonResponse({'status': 'success', 'message': f"Successfully processed {results['processed_count']} records from {results['devices_connected']} devices. {processed_absent} marked absent."}, status=200)
         except Exception as e:
             return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
     return JsonResponse({'status': 'error', 'message': 'Invalid method'}, status=400)

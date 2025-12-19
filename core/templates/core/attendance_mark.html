@@ -129,6 +129,7 @@
 
 <form method="post" class="card">
     {% csrf_token %}
+    <input type="hidden" name="date" value="{{ selected_date }}">
 
     <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; align-items: flex-end;">
         <div style="flex: 1; min-width: 150px;">
@@ -152,12 +153,15 @@
                 <th>Employee Name</th>
                 <th>Department</th>
                 <th>Status ({{ selected_date }})</th>
+                <th>Actions</th>
             </tr>
         </thead>
         <tbody>
             {% for employee in employees %}
             {% with attendance=attendance_map|get_item:employee.id %}
-            <tr {% if attendance %}style="background-color: rgba(72, 187, 120, 0.1);" {% endif %}>
+            {% with leave=leave_map|get_item:employee.id %}
+            <tr {% if attendance %}style="background-color: rgba(72, 187, 120, 0.1);" {% elif leave
+                %}style="background-color: rgba(237, 137, 54, 0.1);" {% endif %}>
                 <td>
                     <input type="checkbox" name="employee_ids" value="{{ employee.id }}" class="emp-checkbox">
                 </td>
@@ -176,11 +180,35 @@
                         In: {{ attendance.check_in_time|time:"H:i" }} (Not checked out)
                     </span>
                     {% endif %}
+                    {% elif leave %}
+                    <span class="badge"
+                        style="background-color: #e53e3e; color: white; padding: 4px 8px; border-radius: 4px;">
+                        On Leave ({{ leave.leave_type }})
+                    </span>
                     {% else %}
                     <span class="text-secondary">-</span>
                     {% endif %}
                 </td>
+                <td>
+                    {% if not attendance and not leave %}
+                    <div style="display: flex; gap: 0.5rem; align-items: center;">
+                        <select name="leave_type_{{ employee.id }}" class="form-select form-select-sm"
+                            style="width: auto; padding: 0.25rem 2rem 0.25rem 0.5rem; font-size: 0.8rem;">
+                            <option value="">-- Type --</option>
+                            <option value="unpaid">Unpaid Leave</option>
+                            {% for lt in leave_types %}
+                            <option value="{{ lt.id }}">{{ lt.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit" formaction="{% url 'mark_single_leave' employee.id %}" formnovalidate
+                            class="btn btn-warning btn-sm" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;">
+                            Mark
+                        </button>
+                    </div>
+                    {% endif %}
+                </td>
             </tr>
+            {% endwith %}
             {% endwith %}
             {% empty %}
             <tr>

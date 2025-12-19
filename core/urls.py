@@ -38,6 +38,7 @@ urlpatterns = [
 
     # Attendance Management URLs
     path('attendance/mark/', views.attendance_mark, name='attendance_mark'),
+    path('attendance/mark_leave/<int:employee_id>/', views.mark_single_leave, name='mark_single_leave'),
     path('attendance/<int:pk>/edit/', views.attendance_edit, name='attendance_edit'),
     path('attendance/<int:pk>/delete/', views.attendance_delete, name='attendance_delete'),
     
