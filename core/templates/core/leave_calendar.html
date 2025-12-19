@@ -73,7 +73,7 @@
                         <div style="display: flex; justify-content: space-between;">
                             <strong>{{ day }}</strong>
                             {% if day in holiday_map %}
-                            <span class="badge badge-danger">Holiday</span>
+                            <span class="text-danger fw-bold">Holiday</span>
                             {% endif %}
                         </div>
                     </td>
@@ -87,8 +87,7 @@
 </div>
 <script>
     function toggleHoliday(dateStr) {
-        // Simple confirmation
-        if (!confirm('Toggle holiday for ' + dateStr + '?')) return;
+
 
         // Using fetch
         fetch('{% url "toggle_holiday" %}', {
