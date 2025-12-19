@@ -127,6 +127,16 @@ class Holiday(models.Model):
     def __str__(self):
         return f"{self.date} - {self.description}"
 
+    def __str__(self):
+        return f"{self.date} - {self.description}"
+
+class LeaveType(models.Model):
+    name = models.CharField(max_length=100, unique=True, help_text="e.g., Casual Leave, Medical Leave")
+    days_allowed = models.PositiveIntegerField(help_text="Total days allowed per year for this leave type")
+
+    def __str__(self):
+        return f"{self.name} ({self.days_allowed} days)"
+
 class Leave(models.Model):
     LEAVE_TYPE_CHOICES = [
         ('Paid', 'Paid'),

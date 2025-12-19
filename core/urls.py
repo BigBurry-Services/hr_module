@@ -61,7 +61,9 @@ urlpatterns = [
     path('leaves/calendar/', views.leave_calendar, name='leave_calendar'),
     path('leaves/toggle-holiday/', views.toggle_holiday, name='toggle_holiday'),
     path('leaves/list/', views.leave_list, name='leave_list'),
+    path('leaves/export/', views.export_leaves_csv, name='export_leaves_csv'),
     path('salary/advance/', views.salary_advance_list, name='salary_advance_list'),
+    path('salary/advance/export/', views.export_salary_advances_csv, name='export_salary_advances_csv'),
     path('salary/monthly-report/', views.monthly_salary_report, name='monthly_salary_report'),
 ]
 

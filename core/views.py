@@ -7,10 +7,10 @@ from django.contrib.auth.decorators import login_required
 import datetime
 import calendar
 import csv
-from .models import Employee, Attendance, HRProfile, Department, Designation, Allowance, AttendanceDevice, EmployeeAllowance, Holiday, Leave, SalaryAdvance
+from .models import Employee, Attendance, Department, Designation, Allowance, EmployeeAllowance, HRProfile, Holiday, Leave, SalaryAdvance, AttendanceDevice, LeaveType
 from django.contrib.auth.models import User
 from django.db import transaction
-from .forms import EmployeeForm, AttendanceForm, SalarySummaryForm, RegistrationForm, DepartmentForm, DesignationForm, AllowanceForm, AttendanceDeviceForm, EmployeeAllowanceFormSet, EmployeeAllowanceForm, HRProfileForm, HolidayForm, LeaveForm, SalaryAdvanceForm
+from .forms import EmployeeForm, RegistrationForm, DepartmentForm, DesignationForm, AllowanceForm, EmployeeAllowanceFormSet, AttendanceForm, HRProfileForm, HolidayForm, LeaveForm, SalaryAdvanceForm, AttendanceDeviceForm, LeaveTypeForm
 from django.http import JsonResponse
 from .utils import DeviceSyncService
 from .decorators import hr_required, admin_required
@@ -257,9 +257,32 @@ def employee_list(request):
             Q(designation__name__icontains=search_query)
         )
     
+    # Sorting functionality
+    sort_by = request.GET.get('sort', 'employee_code')  # Default sort
+    order = request.GET.get('order', 'asc')
+    
+    # Mapping friendly sort keys to actual model fields
+    sort_map = {
+        'code': 'employee_code',
+        'name': 'full_name',
+        'department': 'department__name',
+        'designation': 'designation__name',
+        'date': 'joining_date'
+    }
+    
+    # Get the actual model field, defaulting to employee_code if invalid key
+    model_field = sort_map.get(sort_by, 'employee_code')
+    
+    if order == 'desc':
+        model_field = '-' + model_field
+        
+    employees = employees.order_by(model_field)
+    
     return render(request, 'core/employee_list.html', {
         'employees': employees,
-        'search_query': search_query
+        'search_query': search_query,
+        'current_sort': sort_by,
+        'current_order': order
     })
 
 from django.forms import inlineformset_factory
@@ -1092,30 +1115,55 @@ def toggle_holiday(request):
 
 @hr_required
 def leave_list(request):
-    leaves = Leave.objects.all().order_by('-start_date')
-    employees = Employee.objects.all()
+    leave_types = LeaveType.objects.all().order_by('name')
     
     if request.method == 'POST':
-        form = LeaveForm(request.POST)
-        employee_id = request.POST.get('employee')
-        if form.is_valid() and employee_id:
-            leave = form.save(commit=False)
-            leave.employee_id = employee_id
-            leave.status = 'Approved'
-            leave.save()
-            messages.success(request, "Leave added successfully")
+        form = LeaveTypeForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Leave Type added successfully")
             return redirect('leave_list')
-        elif not employee_id:
-             messages.error(request, "Please select an employee")
     else:
-        form = LeaveForm()
+        form = LeaveTypeForm()
 
-    return render(request, 'core/leave_list.html', {'leaves': leaves, 'employees': employees, 'form': form})
+    context = {
+        'leave_types': leave_types, 
+        'form': form,
+    }
+
+    return render(request, 'core/leave_list.html', context)
+
+@hr_required
+def export_leaves_csv(request):
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="leave_types.csv"'
+
+    writer = csv.writer(response)
+    writer.writerow(['Leave Name', 'Days Allowed'])
+
+    leave_types = LeaveType.objects.all().order_by('name')
+    
+    for lt in leave_types:
+        writer.writerow([
+            lt.name,
+            lt.days_allowed
+        ])
+
+    return response
 
 @hr_required
 def salary_advance_list(request):
-    advances = SalaryAdvance.objects.all().order_by('-date')
     employees = Employee.objects.all()
+    
+    # Filter Logic
+    current_date = datetime.date.today()
+    selected_month = int(request.GET.get('month', current_date.month))
+    selected_year = int(request.GET.get('year', current_date.year))
+
+    advances = SalaryAdvance.objects.filter(
+        date__month=selected_month, 
+        date__year=selected_year
+    ).order_by('-date')
     
     if request.method == 'POST':
         form = SalaryAdvanceForm(request.POST)
@@ -1126,7 +1174,45 @@ def salary_advance_list(request):
     else:
         form = SalaryAdvanceForm()
         
-    return render(request, 'core/salary_advance_list.html', {'advances': advances, 'employees': employees, 'form': form})
+    context = {
+        'advances': advances, 
+        'employees': employees, 
+        'form': form,
+        'selected_month': selected_month,
+        'selected_year': selected_year,
+        'months': list(enumerate(calendar.month_name))[1:],
+        'years': range(current_date.year - 2, current_date.year + 3)
+    }
+        
+    return render(request, 'core/salary_advance_list.html', context)
+
+@hr_required
+def export_salary_advances_csv(request):
+    current_date = datetime.date.today()
+    selected_month = int(request.GET.get('month', current_date.month))
+    selected_year = int(request.GET.get('year', current_date.year))
+
+    response = HttpResponse(content_type='text/csv')
+    filename = f"salary_advances_{selected_month}_{selected_year}.csv"
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+    writer = csv.writer(response)
+    writer.writerow(['Employee Name', 'Date', 'Amount', 'Reason'])
+
+    advances = SalaryAdvance.objects.filter(
+        date__month=selected_month, 
+        date__year=selected_year
+    ).order_by('-date')
+    
+    for adv in advances:
+        writer.writerow([
+            adv.employee.full_name,
+            adv.date.strftime('%Y-%m-%d'),
+            adv.amount,
+            adv.reason
+        ])
+
+    return response
 
 @hr_required
 def monthly_salary_report(request):

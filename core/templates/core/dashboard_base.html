@@ -4,6 +4,45 @@
 {% block title %}{% block dashboard_title %}Dashboard{% endblock %}{% endblock %}
 
 {% block content %}
+<style>
+    /* Layout Fixes for Scrollable Sidebar */
+    .dashboard-layout {
+        display: flex;
+        height: 100vh;
+        /* Full viewport height */
+        overflow: hidden;
+        /* Prevent body scroll */
+    }
+
+    .sidebar {
+        height: 100%;
+        overflow-y: auto;
+        /* Scrollable sidebar */
+        flex-shrink: 0;
+        padding-bottom: 20px;
+        /* Extra padding for bottom items */
+    }
+
+    .main-content {
+        height: 100%;
+        overflow-y: auto;
+        /* Scrollable content */
+        flex-grow: 1;
+        width: 100%;
+    }
+
+    /* Scrollbar Styling for webkit */
+    .sidebar::-webkit-scrollbar,
+    .main-content::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .sidebar::-webkit-scrollbar-thumb,
+    .main-content::-webkit-scrollbar-thumb {
+        background-color: rgba(0, 0, 0, 0.2);
+        border-radius: 3px;
+    }
+</style>
 <div class="dashboard-layout">
     <div class="sidebar">
         <h2><span style="color: var(--secondary-color);">HR</span> Module</h2>

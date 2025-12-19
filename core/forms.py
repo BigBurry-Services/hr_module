@@ -1,5 +1,5 @@
 from django import forms
-from .models import Employee, Attendance, Department, Designation, Allowance, AttendanceDevice, EmployeeAllowance, HRProfile, Holiday, Leave, SalaryAdvance
+from .models import Employee, Attendance, Department, Designation, Allowance, AttendanceDevice, EmployeeAllowance, HRProfile, Holiday, Leave, SalaryAdvance, LeaveType
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
 from django.core.validators import MinLengthValidator, MinValueValidator, RegexValidator
@@ -237,6 +237,15 @@ class HolidayForm(forms.ModelForm):
             'date': forms.DateInput(attrs={'type': 'date'}),
         }
 
+class LeaveTypeForm(forms.ModelForm):
+    class Meta:
+        model = LeaveType
+        fields = ['name', 'days_allowed']
+        widgets = {
+             'name': forms.TextInput(attrs={'placeholder': 'e.g., Casual Leave'}),
+             'days_allowed': forms.NumberInput(attrs={'min': 0}),
+        }
+
 class LeaveForm(forms.ModelForm):
     class Meta:
         model = Leave
@@ -244,6 +253,7 @@ class LeaveForm(forms.ModelForm):
         widgets = {
             'start_date': forms.DateInput(attrs={'type': 'date'}),
             'end_date': forms.DateInput(attrs={'type': 'date'}),
+            'leave_type': forms.RadioSelect(attrs={'class': 'list-unstyled'}), 
         }
     
     def clean(self):

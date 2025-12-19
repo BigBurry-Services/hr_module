@@ -1,24 +1,13 @@
 {% extends 'core/dashboard_base.html' %}
-{% block page_title %}Paid Leaves Management{% endblock %}
+{% block page_title %}Leave Type Management{% endblock %}
 {% block dashboard_content %}
 <div class="row">
     <div class="col-md-4">
         <div class="card">
-            <div class="card-header bg-primary text-white">Add Paid Leave</div>
+            <div class="card-header bg-primary text-white">Add Leave Type</div>
             <div class="card-body">
                 <form method="post">
                     {% csrf_token %}
-                    <div class="form-group mb-3">
-                        <label>Employee</label>
-                        <select name="employee" class="form-control" required>
-                            <option value="">Select Employee</option>
-                            {% for emp in employees %}
-                            <option value="{{ emp.id }}">{{ emp.full_name }} ({{ emp.employee_code }})</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-
-                    <!-- Form fields -->
                     {% for field in form %}
                     <div class="form-group mb-3">
                         <label>{{ field.label }}</label>
@@ -31,41 +20,141 @@
                         {% endfor %}
                     </div>
                     {% endfor %}
-
-                    <button type="submit" class="btn btn-primary btn-block w-100">Add Leave</button>
+                    <button type="submit" class="btn btn-primary btn-block w-100">Add Leave Type</button>
                 </form>
             </div>
         </div>
     </div>
     <div class="col-md-8">
         <div class="card">
-            <div class="card-header">Leave History</div>
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-hover">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>Defined Leave Types</span>
+                <div>
+                    <button type="button" class="btn btn-secondary btn-sm mr-2" onclick="window.print()">Print</button>
+                    <a href="{% url 'export_leaves_csv' %}" class="btn btn-success btn-sm">Export CSV</a>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <style>
+                    .spreadsheet-container {
+                        max-height: 70vh;
+                        overflow: auto;
+                        border-top: 1px solid #dee2e6;
+                    }
+
+                    .spreadsheet-table {
+                        font-size: 14px;
+                        /* Slightly larger for types */
+                        margin-bottom: 0;
+                    }
+
+                    .spreadsheet-table th {
+                        position: sticky;
+                        top: 0;
+                        background-color: #f8f9fa;
+                        z-index: 10;
+                        box-shadow: 0 1px 0 #dee2e6;
+                        vertical-align: middle;
+                        white-space: nowrap;
+                        border: 1px solid #dee2e6;
+                        padding: 8px 12px;
+                    }
+
+                    .spreadsheet-table td {
+                        white-space: nowrap;
+                        vertical-align: middle;
+                        border: 1px solid #dee2e6;
+                        padding: 8px 12px;
+                    }
+
+                    .spreadsheet-table tbody tr:hover {
+                        background-color: #e8f0fe;
+                    }
+
+                    @media print {
+                        @page {
+                            size: portrait;
+                            /* Portrait is better for simple lists */
+                            margin: 1cm;
+                        }
+
+                        body {
+                            background-color: white !important;
+                        }
+
+                        .navbar,
+                        .main-sidebar,
+                        .main-header,
+                        .card-header .btn,
+                        .card-header a,
+                        .nav-tabs,
+                        footer,
+                        .main-footer,
+                        .preloader {
+                            display: none !important;
+                        }
+
+                        .col-md-8 {
+                            flex: 0 0 100%;
+                            max-width: 100%;
+                        }
+
+                        .content-wrapper,
+                        .card,
+                        .card-body {
+                            margin: 0 !important;
+                            padding: 0 !important;
+                            border: none !important;
+                            background-color: white !important;
+                            box-shadow: none !important;
+                        }
+
+                        .card-header {
+                            border: none !important;
+                            background: white !important;
+                            padding-left: 0 !important;
+                        }
+
+                        .spreadsheet-container {
+                            max-height: none !important;
+                            overflow: visible !important;
+                            border: none !important;
+                        }
+
+                        .spreadsheet-table {
+                            width: 100% !important;
+                        }
+
+                        .spreadsheet-table th {
+                            background-color: #f8f9fa !important;
+                            color: black !important;
+                            -webkit-print-color-adjust: exact;
+                        }
+
+                        .spreadsheet-table td,
+                        .spreadsheet-table th {
+                            border: 1px solid black !important;
+                        }
+                    }
+                </style>
+                <div class="spreadsheet-container">
+                    <table class="table table-bordered table-hover spreadsheet-table">
                         <thead>
                             <tr>
-                                <th>Employee</th>
-                                <th>Type</th>
-                                <th>Dates</th>
-                                <th>Reason</th>
-                                <th>Status</th>
+                                <th>Leave Type Name</th>
+                                <th>Days Allowed / Year</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {% for leave in leaves %}
+                            {% for type in leave_types %}
                             <tr>
-                                <td>{{ leave.employee.full_name }}</td>
-                                <td><span
-                                        class="badge {% if leave.leave_type == 'Paid' %}badge-success{% else %}badge-warning{% endif %}">{{
-                                        leave.leave_type }}</span></td>
-                                <td>{{ leave.start_date|date:"d M" }} - {{ leave.end_date|date:"d M Y" }}</td>
-                                <td>{{ leave.reason }}</td>
-                                <td>{{ leave.status }}</td>
+                                <td>{{ type.name }}</td>
+                                <td>{{ type.days_allowed }}</td>
                             </tr>
                             {% empty %}
                             <tr>
-                                <td colspan="5">No leave records found.</td>
+                                <td colspan="2" class="text-center p-3">No leave types defined. Add one using the form.
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>
