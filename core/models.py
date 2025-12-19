@@ -83,6 +83,8 @@ class Employee(models.Model):
     employment_type = models.CharField(max_length=20, choices=EMPLOYMENT_TYPE_CHOICES, default='Permanent')
     basic_salary = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     allowances = models.ManyToManyField(Allowance, through='EmployeeAllowance', blank=True)
+    pf_number = models.CharField(max_length=50, blank=True, null=True)
+    esi_number = models.CharField(max_length=50, blank=True, null=True)
     def __str__(self):
         return f"{self.full_name} ({self.employee_code})"
 
@@ -105,6 +107,7 @@ class Attendance(models.Model):
     date = models.DateField()
     check_in_time = models.TimeField()
     check_out_time = models.TimeField(blank=True, null=True)
+    no_break = models.BooleanField(default=False)
     notes = models.TextField(blank=True, null=True)
 
     def __str__(self):

@@ -11,7 +11,7 @@ import csv
 from .models import Employee, Attendance, Department, Designation, Allowance, EmployeeAllowance, HRProfile, Holiday, Leave, SalaryAdvance, AttendanceDevice, LeaveType
 from django.contrib.auth.models import User
 from django.db import transaction
-from .forms import EmployeeForm, RegistrationForm, DepartmentForm, DesignationForm, AllowanceForm, EmployeeAllowanceFormSet, AttendanceForm, HRProfileForm, HolidayForm, LeaveForm, SalaryAdvanceForm, AttendanceDeviceForm, LeaveTypeForm
+from .forms import EmployeeForm, RegistrationForm, DepartmentForm, DesignationForm, AllowanceForm, EmployeeAllowanceFormSet, AttendanceForm, HRProfileForm, HolidayForm, LeaveForm, SalaryAdvanceForm, AttendanceDeviceForm, LeaveTypeForm, SalarySummaryForm
 from django.http import JsonResponse
 from .utils import DeviceSyncService
 from .decorators import hr_required, admin_required
@@ -681,8 +681,28 @@ def summary(request):
         # Calculate total working days, present days, absent days
         total_working_days = num_days
         present_days = attendance_records.count()
-        absent_days = total_working_days - present_days
+        # Salary Calculation
+        daily_wage = 0
+        basic_salary = 0
+        salary_from_days = 0 
+        if employee:
+            basic_salary = employee.basic_salary
+            daily_wage = basic_salary / 30 # Assuming 30 days
+            salary_from_days = daily_wage * present_days
 
+        # Calculate Leaves (Moved after daily_wage)
+        leaves = Leave.objects.filter(employee=employee, start_date__lte=end_date, end_date__gte=start_date, status='Approved')
+        unpaid_leave_days = 0
+        for leave in leaves:
+            l_start = max(leave.start_date, start_date)
+            l_end = min(leave.end_date, end_date)
+            days = (l_end - l_start).days + 1
+            if days > 0:
+                if leave.leave_type == 'Unpaid':
+                    unpaid_leave_days += days
+        
+        absent_days = total_working_days - present_days 
+        
         summary_data = {
             'employee_name': employee.full_name if employee else "All Employees",
             'month': start_date.strftime("%B %Y"),
@@ -691,15 +711,6 @@ def summary(request):
             'total_absent_days': absent_days,
         }
 
-        # Salary Calculation
-        daily_wage = 0
-        basic_salary = 0
-        if employee:
-            basic_salary = employee.basic_salary
-            daily_wage = basic_salary / 30 # Assuming 30 days
-        
-        salary_from_days = daily_wage * present_days
-        
         # Add Allowances
         total_allowances = 0
         allowance_list = []
@@ -746,12 +757,17 @@ def summary(request):
             employer_pf = Decimal('0.00')
         
         # Employer ESI: 3.25% of Earned Basic (as requested) if Eligible
+        # Employer ESI: 3.25% of Earned Basic (as requested) if Eligible
         if esi_eligible:
             employer_esi = salary_from_days * Decimal('0.0325')
         else:
             employer_esi = Decimal('0.00')
 
-        total_deductions = pf + esi
+        # Salary Advance Calculation
+        advances = SalaryAdvance.objects.filter(employee=employee, date__range=[start_date, end_date])
+        total_advance = advances.aggregate(Sum('amount'))['amount__sum'] or Decimal('0.00')
+
+        total_deductions = pf + esi + total_advance
         
         salary_payable = gross_salary - total_deductions
         
@@ -780,15 +796,60 @@ def summary(request):
              'total_emp_share': total_emp_share,
              'total_employer_share': total_employer_share,
              'grand_total_gov_payable': grand_total_gov_payable,
+             'salary_advance': total_advance,
              'total_deductions': total_deductions,
              'salary_payable': salary_payable,
              'daily_wage': daily_wage,
-             # 'attendance_list': attendance_records.order_by('date') # Replaced by full list below
+             # Slip Data
+             'designation': employee.designation.name if employee.designation else "N/A",
+             'joining_date': employee.joining_date,
+             'pf_number': employee.pf_number,
+             'esi_number': employee.esi_number,
+             'leave_cut_days': absent_days, # Total days not paid
+             'leave_cut_amount': basic_salary - salary_from_days, # The amount lost due to not being present
+
+             'attendance_list': attendance_records.order_by('date')
         })
+
+        # Calculate Total Working Hours and Overtime
+        total_seconds_worked = 0
+        total_overtime_seconds = 0
+        
+        # Helper maps for Status
+        # Fetch Holidays
+        holidays = Holiday.objects.filter(date__range=[start_date, end_date])
+        holiday_map = {h.date: h.description for h in holidays}
+        
+        # Fetch Leaves (if employee selected) - handled slightly differently because ranges
+        leave_map = {}
+        if employee:
+             # Need to find leaves that overlap with this month
+             leaves = Leave.objects.filter(
+                 employee=employee,
+                 start_date__lte=end_date, 
+                 end_date__gte=start_date,
+                 status='Approved'
+             )
+             for l in leaves:
+                 # Iterate days to fill map
+                 curr = l.start_date
+                 while curr <= l.end_date:
+                     if start_date <= curr <= end_date:
+                         leave_map[curr] = l.leave_type
+                     curr += datetime.timedelta(days=1)
+
 
         # Generate Full Attendance List (All Dates)
         full_attendance_list = []
         att_map = {att.date: att for att in attendance_records}
+        
+        # Generate Full Attendance List (All Dates)
+        full_attendance_list = []
+        att_map = {att.date: att for att in attendance_records}
+        
+        # Track totals inside the daily loop now
+        total_seconds_worked = 0
+        total_overtime_seconds = 0
         
         for day in range(1, num_days + 1):
             current_date = datetime.date(current_year, month, day)
@@ -803,10 +864,22 @@ def summary(request):
                 'check_out_alert': True,
                 'working_hours': "-",
                 'overtime': "-",
-                'is_low_hours': False
+                'is_low_hours': False,
+                'status': "Absent", # Default
+                'status_color': 'danger', # Default red
+                'id': None,
+                'no_break': False
             }
             
+            # Determine Status
+            is_present = False
             if record:
+                is_present = True
+                day_data['id'] = record.id
+                day_data['no_break'] = record.no_break
+                day_data['status'] = "Present"
+                day_data['status_color'] = "success"
+                
                 if record.check_in_time:
                     day_data['check_in_time'] = record.check_in_time
                     day_data['check_in_alert'] = False
@@ -826,54 +899,59 @@ def summary(request):
                         check_out += datetime.timedelta(days=1)
                     
                     duration = check_out - check_in
-                    seconds = duration.total_seconds()
+                    raw_seconds = duration.total_seconds()
                     
-                    # Highlight if < 4 hours (14400 seconds)
+                    # Deduct 1 hour (3600 seconds) for lunch UNLESS no_break is set
+                    deduction = 3600
+                    if record.no_break:
+                        deduction = 0
+                    
+                    seconds = raw_seconds - deduction
+                    if seconds < 0: seconds = 0
+                    
+                    # Highlight if < 4 hours (14400 seconds) - Adjusted Hours
                     if seconds < 14400:
                         day_data['is_low_hours'] = True
                     
                     day_data['working_hours'] = format_seconds(seconds)
                     
-                    # Overtime > 9 hours
-                    if seconds > 32400:
-                        ot_seconds = seconds - 32400
+                    # Overtime > 8 hours (28800 seconds) for ADJUSTED hours
+                    if seconds > 28800:
+                        ot_seconds = seconds - 28800
                         day_data['overtime'] = format_seconds(ot_seconds)
+                        total_overtime_seconds += ot_seconds # Aggregate for total
                     else:
                         day_data['overtime'] = "00:00"
+                    
+                    total_seconds_worked += seconds # Aggregate for total
+            
+            if not is_present:
+                # Check Leave
+                if current_date in leave_map:
+                    l_type = leave_map[current_date]
+                    day_data['status'] = f"On Leave ({l_type})"
+                    day_data['status_color'] = "warning"
+                    
+                    # If Paid leave (or assuming non-unpaid is paid), count 8 hours
+                    # Logic check: Leaves have 'Paid' or 'Unpaid' stored in 'leave_type' field (category)
+                    # BUT `leave_map` stores `leave.leave_type`.
+                    # Let's ensure we are checking the category.
+                    # In my previous edit, I stored `l.leave_type` in `leave_map`.
+                    # Assuming l.leave_type is 'Paid'/'Unpaid'.
+                    # If it's 'Paid', add 8 hours.
+                    if l_type == 'Paid':
+                        seconds = 28800 # 8 hours
+                        day_data['working_hours'] = "08:00 (Leave)"
+                        total_seconds_worked += seconds
+                        
+                # Check Holiday
+                elif current_date in holiday_map:
+                    day_data['status'] = f"Holiday ({holiday_map[current_date]})"
+                    day_data['status_color'] = "info"
             
             full_attendance_list.append(day_data)
 
         summary_data['attendance_list'] = full_attendance_list
-
-        # Calculate Total Working Hours and Overtime
-        total_seconds_worked = 0
-        total_overtime_seconds = 0
-        
-        for record in attendance_records:
-            if record.check_in_time and record.check_out_time:
-                # Create naive datetime objects for calculation (assuming same day checkout for simplicity or handling crossing midnight if dates were available, but here we only have TimeField and DateField)
-                # Since we only have TimeField, we combine with the record's date.
-                # WARNING: This assumes checkout is on the same day. If checkout is next day (e.g. night shift), this logic needs 'next day' check.
-                # Given current models, we will assume same-day for now as is standard for basic time clocks unless specified otherwise.
-                
-                check_in = datetime.datetime.combine(record.date, record.check_in_time)
-                check_out = datetime.datetime.combine(record.date, record.check_out_time)
-                
-                if check_out < check_in:
-                     # Handle overnight shift case simply by adding a day to checkout
-                     check_out += datetime.timedelta(days=1)
-
-                duration = check_out - check_in
-                seconds = duration.total_seconds()
-                total_seconds_worked += seconds
-                
-                # Check for overtime (> 9 hours)
-                # 9 hours = 9 * 3600 = 32400 seconds
-                if seconds > 32400:
-                    overtime_seconds = seconds - 32400
-                    total_overtime_seconds += overtime_seconds
-
-
 
         summary_data.update({
             'total_working_hours': format_seconds(total_seconds_worked),
@@ -1239,6 +1317,47 @@ def leave_list(request):
     return render(request, 'core/leave_list.html', context)
 
 @hr_required
+def leave_type_edit(request, pk):
+    leave_type = get_object_or_404(LeaveType, pk=pk)
+    if request.method == 'POST':
+        form = LeaveTypeForm(request.POST, instance=leave_type)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f"Leave Type '{leave_type.name}' updated successfully.")
+            return redirect('leave_list')
+    else:
+        form = LeaveTypeForm(instance=leave_type)
+    return render(request, 'core/leave_type_edit.html', {'form': form, 'leave_type': leave_type})
+
+@hr_required
+def leave_type_delete(request, pk):
+    leave_type = get_object_or_404(LeaveType, pk=pk)
+    # Check dependencies
+    # Since Leave model stores leave_type as a CharField (choice/string) in implementation plan analysis 
+    # but let's check the model definition again.
+    # Ah, the model definition showed `leave_type = models.CharField`. It DOES NOT ForeignKey to LeaveType.
+    # However, for data integrity, we might want to check if any leaves use this NAME?
+    # Or maybe we should improve the Leave model to use FK? 
+    # For now, based on existing code, it seems decoupled or loosely coupled.
+    # Re-reading model: `class LeaveType` exists. `class Leave` has `leave_type` as CharField.
+    # So deleting a LeaveType won't CASCADE delete Leaves, but it might make them refer to a non-existent type definition.
+    
+    # Check if any Leave uses this name pattern?
+    # Or just warn.
+    
+    # Wait, the prompt implies "leave_type" in Leave model might store the CATEGORY (Paid/Unpaid) or the TYPE NAME?
+    # In `mark_single_leave` I implemented storing `reason="{Type Name} - Marked by HR"`.
+    # And `leave_type` field in `Leave` model has choices 'Paid'/'Unpaid'.
+    # So `LeaveType` is more like a configuration for "Days Allowed" and available names.
+    
+    if request.method == 'POST':
+        leave_type.delete()
+        messages.success(request, f"Leave Type '{leave_type.name}' deleted successfully.")
+        return redirect('leave_list')
+        
+    return render(request, 'core/leave_type_confirm_delete.html', {'leave_type': leave_type})
+
+@hr_required
 def export_leaves_csv(request):
     response = HttpResponse(content_type='text/csv')
     response['Content-Disposition'] = 'attachment; filename="leave_types.csv"'
@@ -1363,9 +1482,19 @@ def monthly_salary_report(request):
                  check_in = datetime.datetime.combine(att.date, att.check_in_time)
                  check_out = datetime.datetime.combine(att.date, att.check_out_time)
                  if check_out < check_in: check_out += datetime.timedelta(days=1)
-                 duration = (check_out - check_in).total_seconds()
-                 if duration > 32400: # > 9 hours
-                     overtime_seconds += (duration - 32400)
+                 raw_duration = (check_out - check_in).total_seconds()
+                 
+                 # Deduct 1 hour lunch UNLESS no_break
+                 deduction = 3600
+                 if att.no_break:
+                     deduction = 0
+                     
+                 duration = raw_duration - deduction
+                 if duration < 0: duration = 0
+                 
+                 # Overtime > 8 hours (28800)
+                 if duration > 28800: 
+                     overtime_seconds += (duration - 28800)
                      
         overtime_hours = Decimal(overtime_seconds) / Decimal(3600)
         ot_amount = (daily_rate / Decimal(9)) * overtime_hours
@@ -1421,3 +1550,15 @@ def monthly_salary_report(request):
         'years': range(current_date.year - 2, current_date.year + 3)
     }
     return render(request, 'core/monthly_salary_report.html', context)
+
+@hr_required
+def toggle_no_break(request, pk):
+    attendance = get_object_or_404(Attendance, pk=pk)
+    attendance.no_break = not attendance.no_break
+    attendance.save()
+    
+    # Redirect back to previous page
+    next_url = request.GET.get('next')
+    if next_url:
+        return redirect(next_url)
+    return redirect('summary')
