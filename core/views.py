@@ -1622,7 +1622,9 @@ def monthly_salary_report(request):
         
         while current_iter_date <= end_date:
             day_record = att_map.get(current_iter_date)
-            is_present = False
+            # Replicate Summary Logic: If a record exists (even empty/0-duration), it counts as "presence attempt" 
+            # and suppresses automatic Holiday/Leave 8h credit.
+            has_record = day_record is not None
             
             if day_record and day_record.check_in_time and day_record.check_out_time:
                  # Check valid duration
@@ -1632,7 +1634,7 @@ def monthly_salary_report(request):
                  
                  raw_seconds = (check_out - check_in).total_seconds()
                  if raw_seconds > 0:
-                     is_present = True
+                     # Valid Work detected
                      
                      # Count for Absent Deduction (Present on Working Day)
                      if current_iter_date not in holiday_set:
@@ -1657,37 +1659,31 @@ def monthly_salary_report(request):
                          else:
                              total_regular_seconds += seconds
 
-            if not is_present:
+            # Only apply automatic credits if NO record exists
+            if not has_record:
                  # Check Leave
                  if current_iter_date in leave_map:
                      l_type = leave_map[current_iter_date]
                      if l_type == 'Paid':
                          total_regular_seconds += 28800
                          
-                 # Check Holiday (Only if not Leave - usually Leave takes precedence or overlapping doesn't matter for Paid)
-                 # Summary View Logic (Line 1044): elif current_date in holiday_map
-                 # Meaning: If Leave (Paid/Unpaid), we processed it. If NOT Leave, check Holiday.
-                 # Wait. Summary logic (Line 1024): if not is_present: Check Leave. elif Holiday.
-                 # So Leave overrides Holiday.
+                 # Check Holiday (Only if not Leave)
                  elif current_iter_date in holiday_set:
                      total_regular_seconds += 28800
             
             current_iter_date += datetime.timedelta(days=1)
 
-        total_seconds_worked = total_regular_seconds + total_overtime_seconds
-        working_hours_decimal = total_seconds_worked / 3600.0
+        # Match Summary View 'Total Working Hours' which is Regular Hours Only
+        # (Overtime is shown in a separate column)
+        working_hours_decimal = total_regular_seconds / 3600.0
         wh_hours = int(working_hours_decimal)
         wh_minutes = int((working_hours_decimal - wh_hours) * 60)
         total_working_hours_str = f"{wh_hours:02d}:{wh_minutes:02d}"
         
-        # Update OT and OT Amount to use these totals if needed? 
-        # User requested 'Total Working Hours' match. 
-        # The Report also displays 'OT Hours'. 
-        # Summary View 'OT Hours' comes from 'total_overtime_seconds'.
-        # So Report OT should also match this loop.
+        # OT Hours
         overtime_hours = Decimal(total_overtime_seconds) / Decimal(3600)
+        # OT Amount: Daily / 8 (Net) * Hours
         ot_amount = (daily_rate / Decimal(8)) * overtime_hours
-                     
         
         # Absent calc: Working Days - Present Days (Excl Holidays) - Leave Days (Excl Holidays)
         absent_days = working_days_in_month - present_on_working_days - total_leave_days
