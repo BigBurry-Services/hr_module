@@ -122,8 +122,7 @@
         <button type="submit" name="action" value="generate" class="btn btn-primary no-print">Update View</button>
         <button type="submit" name="action" value="download_pdf" class="btn btn-secondary no-print">Download
             PDF</button>
-        <button type="button" class="btn btn-info no-print" data-bs-toggle="modal"
-            data-bs-target="#salarySlipModal">Preview Salary Slip</button>
+
         <button type="button" onclick="window.print()" class="btn btn-secondary no-print"><i class="fas fa-print"></i>
             Direct Print</button>
         {% else %}
@@ -139,6 +138,29 @@
         <h2>Salary Summary for {{ summary_data.employee_name }} - {{ summary_data.month }}</h2>
     </div>
     <div class="card-body">
+        <!-- Employee Details Table (Spreadsheet Style) -->
+        <table class="excel-table mb-4">
+            <tbody>
+                <tr>
+                    <td><strong>Name</strong></td>
+                    <td>{{ summary_data.employee_name }}</td>
+                    <td><strong>Employee Code</strong></td>
+                    <td>{{ summary_data.employee_code }}</td>
+                </tr>
+                <tr>
+                    <td><strong>Designation</strong></td>
+                    <td>{{ summary_data.designation }}</td>
+                    <td><strong>Date of Joining</strong></td>
+                    <td>{{ summary_data.joining_date|date:"d-M-Y" }}</td>
+                </tr>
+                <tr>
+                    <td><strong>PF Number</strong></td>
+                    <td>{{ summary_data.pf_number|default:"-" }}</td>
+                    <td><strong>ESI Number</strong></td>
+                    <td>{{ summary_data.esi_number|default:"-" }}</td>
+                </tr>
+            </tbody>
+        </table>
 
         <div class="row">
             <!-- Earnings -->
@@ -429,7 +451,7 @@
         <tr>
             <td colspan="2" class="slip-header">PF NUMBER</td>
             <td class="text-center">{{ summary_data.pf_number|default:"-" }}</td>
-            <td class="slip-header">IP NUMBER</td>
+            <td class="slip-header">ESI NUMBER</td>
             <td class="text-center">{{ summary_data.esi_number|default:"-" }}</td>
         </tr>
 
@@ -441,38 +463,15 @@
             <td class="slip-header text-end" style="width: 10%">AMOUNT</td>
         </tr>
 
-        <!-- Row 1: Basic + Salary Advance -->
+        <!-- Dynamic Rows Loop -->
+        {% for row in summary_data.slip_rows %}
         <tr>
-            <td>BASIC/DA/HRA/CONVEYANCE/OTHER ALLOWANCE</td>
-            <td class="text-end">{{ summary_data.basic_salary|floatformat:0 }}</td>
-            <td colspan="2">SALARY ADVANCE</td>
-            <td class="text-end">{{ summary_data.salary_advance|floatformat:0 }}</td>
+            <td>{{ row.earning_name }}</td>
+            <td class="text-end">{{ row.earning_amount|floatformat:2 }}</td>
+            <td colspan="2">{{ row.deduction_name }}</td>
+            <td class="text-end">{{ row.deduction_amount|floatformat:2 }}</td>
         </tr>
-
-        <!-- Row 2: Production Allowance (Dummy/Zero as per image req unless we have it) -->
-        <!-- We will list allowances dynamically but structure them to fill -->
-        <tr>
-            <td>PRODUCTION ALLOWANCE</td>
-            <td class="text-end">0</td> <!-- Placeholder if not in model -->
-            <td colspan="2">ESIC (0.75%)</td>
-            <td class="text-end">{{ summary_data.esi|floatformat:0 }}</td>
-        </tr>
-
-        <!-- Row 3: Overtime -->
-        <tr>
-            <td>OVERTIME ALLOWANCE</td>
-            <td class="text-end">{{ summary_data.overtime_amount|floatformat:2 }}</td>
-            <td colspan="2">PF</td>
-            <td class="text-end">{{ summary_data.pf|floatformat:0 }}</td>
-        </tr>
-
-        <!-- Row 4: Holiday / Leave Cutting -->
-        <tr>
-            <td>HOLIDAY ALLOWANCE</td>
-            <td class="text-end">0</td> <!-- Placeholder -->
-            <td colspan="2">LEAVE CUTTING</td>
-            <td class="text-end">{{ summary_data.leave_cut_amount|floatformat:0 }}</td>
-        </tr>
+        {% endfor %}
 
         <!-- Totals Row -->
         <tr style="font-weight: bold; border-top: 2px solid black;">
@@ -508,10 +507,7 @@
                     <td class="slip-header">OVERTIME HRS</td>
                     <td class="text-end">{{ summary_data.total_overtime_hours }}</td>
                 </tr>
-                <tr>
-                    <td class="slip-header">HOLIDAY HRS</td>
-                    <td class="text-end">0</td>
-                </tr>
+
             </table>
         </div>
     </div>
@@ -560,6 +556,15 @@
             var slipContent = $('#custom-salary-slip').html();
             $('#salary-slip-preview-body').html(slipContent);
         });
+    });
+</script>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('print_now') === 'true') {
+            window.print();
+        }
     });
 </script>
 {% endblock %}

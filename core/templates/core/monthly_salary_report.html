@@ -184,7 +184,7 @@
                         <td class="num-cell">{{ row.total_salary }}</td>
                         <td class="num-cell"><strong>{{ row.net_salary }}</strong></td>
                         <td class="text-center">
-                            <a href="{% url 'summary' %}?employee={{ row.emp_id }}&month={{ selected_month }}&year={{ selected_year }}"
+                            <a href="{% url 'summary' %}?employee={{ row.emp_id }}&month={{ selected_month }}&year={{ selected_year }}&print_now=true"
                                 target="_blank" class="btn btn-xs btn-info">Print</a>
                         </td>
                     </tr>

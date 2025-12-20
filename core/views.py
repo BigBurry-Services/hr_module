@@ -722,6 +722,7 @@ def summary(request):
         total_overtime_seconds = 0
         present_days_count = 0
         unpaid_leaves_count = 0
+        paid_leaves_count = 0 # NEW
         
         for day in range(1, num_days + 1):
             current_date = datetime.date(current_year, month, day)
@@ -814,6 +815,7 @@ def summary(request):
                     day_data['status'] = f"On Leave ({l_type})"
                     day_data['status_color'] = "warning"
                     if l_type == 'Paid':
+                        paid_leaves_count += 1 # Track count
                         seconds = 28800
                         day_data['working_hours'] = "08:00 (Leave)"
                         total_regular_seconds += seconds
@@ -898,7 +900,10 @@ def summary(request):
         # "basic salary (earned) ... match total minutes worked * per minute charge"
         # I will do exactly that.
         
-        overtime_amount = Decimal(0) 
+        # Overtime Allowance = Overtime Minutes * Rate
+        # User Formula: total overtime hours * 60 * wage per minute
+        overtime_minutes = int(total_overtime_seconds / 60)
+        overtime_amount = Decimal(overtime_minutes) * per_minute_wage 
         # IF I set this to 0, I should probably hide the row or just show 0.
         # OR does the user want:
         # Basic = Regular * Rate
@@ -996,8 +1001,43 @@ def summary(request):
              if d['status'] == 'Absent':
                  absent_days_count += 1
         
+        # Prepare Slip Data
+        earnings_list_slip = []
+        earnings_list_slip.append({"name": "Basic Salary", "amount": earned_basic})
+        earnings_list_slip.append({"name": "Overtime Allowance", "amount": overtime_amount})
+        
+        for al in allowance_list:
+             earnings_list_slip.append({"name": al['name'], "amount": al['amount']})
+        
+        deductions_list_slip = []
+        deductions_list_slip.append({"name": "Salary Advance", "amount": total_advance})
+        if esi_eligible:
+            deductions_list_slip.append({"name": "ESIC (0.75%)", "amount": esi})
+        if pf_eligible:
+            deductions_list_slip.append({"name": "PF", "amount": pf})
+        
+        leave_cut_val = basic_salary - earned_basic
+        if leave_cut_val > 0:
+            deductions_list_slip.append({"name": "Leave Cut", "amount": leave_cut_val})
+            
+        slip_rows = []
+        max_rows = max(len(earnings_list_slip), len(deductions_list_slip))
+        
+        for i in range(max_rows):
+            e_item = earnings_list_slip[i] if i < len(earnings_list_slip) else None
+            d_item = deductions_list_slip[i] if i < len(deductions_list_slip) else None
+            
+            row = {
+                'earning_name': e_item['name'].upper() if e_item else "",
+                'earning_amount': e_item['amount'] if e_item else "",
+                'deduction_name': d_item['name'].upper() if d_item else "",
+                'deduction_amount': d_item['amount'] if d_item else ""
+            }
+            slip_rows.append(row)
+
         summary_data = {
             'employee_name': employee.full_name if employee else "All Employees",
+            'employee_code': employee.employee_code if employee else "-",
             'month': start_date.strftime("%B %Y"),
             'total_working_days': total_working_days,
             'total_present_days': present_days_count,
@@ -1034,72 +1074,230 @@ def summary(request):
              'joining_date': employee.joining_date if employee else None,
              'pf_number': employee.pf_number if employee else "-",
              'esi_number': employee.esi_number if employee else "-",
-             'leave_cut_days': absent_days_count,
-             'leave_cut_amount': basic_salary - earned_basic, # approx
+             'leave_cut_days': unpaid_leaves_count,
+             'leave_cut_amount': leave_cut_val,
              'total_unpaid_leaves': unpaid_leaves_count,
+             'total_paid_leaves': paid_leaves_count, # NEW Field
+             'slip_rows': slip_rows,
              
              'attendance_list': full_attendance_list
         }
 
         if action == 'download_pdf':
             response = HttpResponse(content_type='application/pdf')
-            response['Content-Disposition'] = f'attachment; filename="salary_slip_{employee.full_name}_{start_date.strftime("%B_%Y")}.pdf"'
+            fname = f"Salary_Slip_{employee.full_name}_{start_date.strftime('%b_%Y')}.pdf"
+            response['Content-Disposition'] = f'attachment; filename="{fname}"'
             
+            from reportlab.lib import colors
             from reportlab.lib.pagesizes import letter
-            from reportlab.pdfgen import canvas
+            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.units import inch
 
-            p = canvas.Canvas(response, pagesize=letter)
-            p.setFont("Helvetica-Bold", 16)
-            p.drawString(100, 750, f"Salary Slip - {summary_data['month']}")
+            doc = SimpleDocTemplate(response, pagesize=letter)
+            elements = []
+            styles = getSampleStyleSheet()
             
-            p.setFont("Helvetica", 12)
-            p.drawString(100, 720, f"Employee Name: {summary_data['employee_name']}")
-            p.drawString(100, 700, f"Total Working Days: {summary_data['total_working_days']}")
-            p.drawString(100, 680, f"Present Days: {summary_data['total_present_days']}")
+            # Title
+            title_style = styles["Heading1"]
+            title_style.alignment = 1 # Center
+            elements.append(Paragraph(f"Salary Slip - {summary_data['month']}", title_style))
+            elements.append(Paragraph("ASHIQ ENTERPRISES", styles["Heading2"])) # Assuming company name
+            elements.append(Spacer(1, 0.2*inch))
+            
+            # 1. Employee Details Table
+            emp_data = [
+                ["Employee Name:", summary_data['employee_name'], "Employee Code:", summary_data.get('code', employee.employee_code)],
+                ["Designation:", summary_data.get('designation', '-'), "Date of Joining:", str(summary_data.get('joining_date', '-'))],
+                ["PF Number:", summary_data.get('pf_number', '-'), "ESI Number:", summary_data.get('esi_number', '-')]
+            ]
+            t_emp = Table(emp_data, colWidths=[1.5*inch, 2.5*inch, 1.5*inch, 1.5*inch])
+            t_emp.setStyle(TableStyle([
+                ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
+                ('FONTSIZE', (0,0), (-1,-1), 10),
+                ('FONTNAME', (0,0), (0,-1), 'Helvetica-Bold'), # Labels Bold
+                ('FONTNAME', (2,0), (2,-1), 'Helvetica-Bold'), # Labels Bold
+                ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
+                ('BACKGROUND', (0,0), (-1,-1), colors.whitesmoke),
+            ]))
+            elements.append(t_emp)
+            elements.append(Spacer(1, 0.2*inch))
+            
+            # 2. Attendance Summary
+            # User Req: Remove Present/Absent. Fix Paid Leaves.
+            att_data = [
+                ["Working Days", "Unpaid Leaves"],
+                [
+                    str(summary_data['total_working_days']),
+                    str(summary_data['total_unpaid_leaves'])
+                ]
+            ]
+            # Add Hours row
+            att_data.append(["Total Hours", "OT Hours", "Total Minutes"])
+            att_data.append([
+                str(summary_data['total_working_hours']),
+                str(summary_data['total_overtime_hours']),
+                 str(summary_data['total_minutes_worked'])
+            ])
+            
+            t_att = Table(att_data, colWidths=[3.5*inch]*2) # Adjusted widths for 2 columns
+            t_att.setStyle(TableStyle([
+                ('GRID', (0,0), (-1,-1), 0.5, colors.black),
+                ('BACKGROUND', (0,0), (-1,0), colors.lightgrey), # Header
+                ('BACKGROUND', (0,2), (-1,2), colors.lightgrey), # Header 2
+                ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+                ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                ('FONTNAME', (0,2), (-1,2), 'Helvetica-Bold'),
+            ]))
+            elements.append(t_att)
+            elements.append(Spacer(1, 0.2*inch))
+            
+            # 3. Salary Details (Earnings vs Deductions side-by-side)
+            
+            # Build Earnings List
+            earnings_list = []
+            earnings_list.append(["Basic Salary (Earned)", f"{summary_data['earned_basic']:.2f}"])
+            earnings_list.append(["Overtime Amount", f"{summary_data['overtime_amount']:.2f}"])
+            for al in summary_data['allowance_list']:
+                earnings_list.append([al['name'], f"{al['amount']:.2f}"])
+            # Fill with empty rows to match deductions if needed? No, separate inner tables inside a master table.
+            
+            # Build Deductions List
+            deductions_list = []
+            deductions_list.append(["PF (Employee)", f"{summary_data['pf']:.2f}"])
+            deductions_list.append(["ESI (Employee)", f"{summary_data['esi']:.2f}"])
+            deductions_list.append(["Salary Advance", f"{summary_data['salary_advance']:.2f}"])
+            # Leave Cut
+            if summary_data.get('leave_cut_amount', 0) > 0:
+                 deductions_list.append(["Leave Cut", f"{summary_data['leave_cut_amount']:.2f}"])
+            
+            # Totals
+            gross_row = ["GROSS EARNINGS", f"{summary_data['gross_salary']:.2f}"]
+            deduct_row = ["TOTAL DEDUCTIONS", f"{summary_data['total_deductions']:.2f}"]
+            
+            # We construct two tables and place them side by side
+            
+            # Pad lists to same length for better alignment (optional but good layout)
+            max_rows = max(len(earnings_list), len(deductions_list))
+            while len(earnings_list) < max_rows: earnings_list.append(["", ""])
+            while len(deductions_list) < max_rows: deductions_list.append(["", ""])
+            
+            earnings_data = [["EARNINGS", "AMOUNT"]] + earnings_list + [gross_row]
+            deductions_data = [["DEDUCTIONS", "AMOUNT"]] + deductions_list + [deduct_row]
+            
+            t_earn = Table(earnings_data, colWidths=[2.5*inch, 1.0*inch])
+            t_earn.setStyle(TableStyle([
+                ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
+                ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
+                ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                ('ALIGN', (1,0), (1,-1), 'RIGHT'), # Amount Right Align
+                ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'), # Total Row Bold
+                ('BACKGROUND', (0,-1), (-1,-1), colors.whitesmoke),
+            ]))
+            
+            t_deduct = Table(deductions_data, colWidths=[2.5*inch, 1.0*inch])
+            t_deduct.setStyle(TableStyle([
+                ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
+                ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
+                ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                ('ALIGN', (1,0), (1,-1), 'RIGHT'),
+                ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
+                ('BACKGROUND', (0,-1), (-1,-1), colors.whitesmoke),
+            ]))
+            
+            # Master Table for Side-by-Side
+            t_master = Table([[t_earn, t_deduct]], colWidths=[3.75*inch, 3.75*inch])
+            t_master.setStyle(TableStyle([
+                ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ]))
+            elements.append(t_master)
+            elements.append(Spacer(1, 0.2*inch))
+            
+            # 4. Net Salary
+            net_style = ParagraphStyle('NetPay', parent=styles['Heading2'], alignment=1, textColor=colors.darkblue)
+            elements.append(Paragraph(f"NET SALARY PAYABLE: {summary_data['salary_payable']:.2f}", net_style))
+            
+            elements.append(Spacer(1, 0.3*inch))
+            
+            # Signatures
+            sig_data = [["Employee Signature", "", "Employer Signature"]]
+            t_sig = Table(sig_data, colWidths=[2.5*inch, 2.5*inch, 2.5*inch])
+            t_sig.setStyle(TableStyle([
+                ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+                ('TOPPADDING', (0,0), (-1,-1), 40), # Space for signature
+            ]))
+            elements.append(t_sig)
+            
+            # --- New Page: Daily Attendance ---
+            from reportlab.platypus import PageBreak
+            elements.append(PageBreak())
+            
+            elements.append(Paragraph(f"Daily Attendance Log - {summary_data['month']}", title_style))
+            elements.append(Spacer(1, 0.2*inch))
+            
+            # Columns: Date, Day, Check In, Check Out, Working Hrs, OT, Status
+            daily_data = [["Date", "Day", "Check In", "Check Out", "Working Hrs", "OT", "Status"]]
+            
+            for att in summary_data['attendance_list']:
+                # Format Date: D-M-Y
+                d_str = att['date'].strftime("%d-%m-%Y")
+                day_name = att['date'].strftime("%A")
+                
+                # Check In/Out - handle potential None or Special string
+                # summary.html uses: {{ row.check_in_time|time:"H:i" }} or "Not Done"
+                # att dict has 'check_in_time' as time obj or string "Not Done"
+                def fmt_time(t):
+                    if isinstance(t, (datetime.time, datetime.datetime)):
+                        return t.strftime("%H:%M")
+                    return str(t)
 
-            p.drawString(100, 660, f"Absent Days: {summary_data['total_absent_days']}")
-            p.drawString(100, 640, f"Total Working Hours: {summary_data['total_working_hours']}")
-            p.drawString(100, 620, f"Total Overtime Hours: {summary_data['total_overtime_hours']}")
-            
-            y = 590
-            p.setFont("Helvetica-Bold", 14)
-            p.drawString(100, y, "Earnings:")
-            y -= 25
-            p.setFont("Helvetica", 12)
-            p.drawString(120, y, f"Basic Salary (Earned): {summary_data['earned_basic']:.2f}")
-            y -= 20
-            
-            # Allowances
-            for allowance in summary_data['allowance_list']:
-                p.drawString(120, y, f"{allowance['name']}: {allowance['amount']:.2f}")
-                y -= 20
+                cin = fmt_time(att['check_in_time'])
+                cout = fmt_time(att['check_out_time'])
+                
+                # Status
+                status = att['status']
+                
+                daily_data.append([
+                    d_str, 
+                    day_name, 
+                    cin, 
+                    cout, 
+                    str(att['working_hours']), 
+                    str(att['overtime']), 
+                    status
+                ])
 
-            y -= 5
-            p.line(120, y+15, 300, y+15) # Separator
-            p.setFont("Helvetica-Bold", 12)
-            p.drawString(120, y, f"Gross Salary: {summary_data['gross_salary']:.2f}")
-
-            y -= 40
-            p.setFont("Helvetica-Bold", 14)
-            p.drawString(100, y, "Deductions:")
-            y -= 25
-            p.setFont("Helvetica", 12)
-            p.drawString(120, y, f"PF (12%): {summary_data['pf']:.2f}")
-            y -= 20
-            p.drawString(120, y, f"ESI (0.75%): {summary_data['esi']:.2f}")
-            y -= 20
+            t_daily = Table(daily_data, colWidths=[1.0*inch, 1.2*inch, 1.0*inch, 1.0*inch, 1.0*inch, 0.8*inch, 1.2*inch])
             
-            y -= 5
-            p.line(120, y+15, 300, y+15) # Separator
-            p.setFont("Helvetica-Bold", 12)
-            p.drawString(120, y, f"Total Deductions: {summary_data['total_deductions']:.2f}")
+            # Striped Table Style
+            ts_daily = [
+                ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
+                ('BACKGROUND', (0,0), (-1,0), colors.darkgrey),
+                ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+                ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+                ('FONTSIZE', (0,0), (-1,-1), 9),
+            ]
             
-            y -= 40
-            p.setFont("Helvetica-Bold", 14)
-            p.drawString(100, y, f"Net Salary Payable: {summary_data['salary_payable']:.2f}")
+            # Row stripes
+            for i in range(1, len(daily_data)):
+                if i % 2 == 0:
+                    bg = colors.whitesmoke
+                else:
+                    bg = colors.white
+                ts_daily.append(('BACKGROUND', (0,i), (-1,i), bg))
+                
+                # Highlight Absent/Leave
+                stat = daily_data[i][6] # status column
+                if 'Absent' in stat or 'Unpaid' in stat:
+                     ts_daily.append(('TEXTCOLOR', (6,i), (6,i), colors.red))
+                elif 'Paid' in stat or 'Holiday' in stat:
+                     ts_daily.append(('TEXTCOLOR', (6,i), (6,i), colors.green))
 
-            p.showPage()
-            p.save()
+            t_daily.setStyle(TableStyle(ts_daily))
+            elements.append(t_daily)
+
+            doc.build(elements)
             return response
 
     context = {

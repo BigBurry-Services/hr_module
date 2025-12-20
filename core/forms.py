@@ -66,7 +66,8 @@ class EmployeeForm(forms.ModelForm):
             'employee_code', 'full_name', 'address', 'date_of_birth',
             'contact_number', 'aadhar_number', 'sex', 'nationality',
             'state', 'joining_date', 'department', 'designation',
-            'previous_experience', 'employment_type', 'basic_salary'
+            'previous_experience', 'employment_type', 'basic_salary',
+            'pf_number', 'esi_number'
         ]
         widgets = {
             'date_of_birth': forms.DateInput(attrs={'type': 'date'}),
