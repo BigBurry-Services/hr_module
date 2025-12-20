@@ -6,38 +6,129 @@
 {% block page_title %}Employee Detail: {{ employee.full_name }}{% endblock %}
 
 {% block dashboard_content %}
-    <div class="detail-grid">
-        <p><strong>Employee Code:</strong> {{ employee.employee_code }}</p>
-        <p><strong>Full Name:</strong> {{ employee.full_name }}</p>
-        <p><strong>Address:</strong> {{ employee.address }}</p>
-        <p><strong>Date of Birth:</strong> {{ employee.date_of_birth|default:"N/A" }}</p>
-        <p><strong>Contact Number:</strong> {{ employee.contact_number|default:"N/A" }}</p>
-        <p><strong>Aadhar Number:</strong> {{ employee.aadhar_number|default:"N/A" }}</p>
-        <p><strong>Sex:</strong> {{ employee.get_sex_display|default:"N/A" }}</p>
-        <p><strong>Nationality:</strong> {{ employee.nationality|default:"N/A" }}</p>
-        <p><strong>State:</strong> {{ employee.state|default:"N/A" }}</p>
-        <p><strong>Joining Date:</strong> {{ employee.joining_date }}</p>
-        <p><strong>Department:</strong> {{ employee.department.name|default:"N/A" }}</p>
-        <p><strong>Designation:</strong> {{ employee.designation.name|default:"N/A" }}</p>
-        <p><strong>Previous Experience:</strong> {{ employee.previous_experience|default:"N/A" }}</p>
-        <p><strong>Employment Type:</strong> {{ employee.get_employment_type_display }}</p>
-        <p><strong>Basic Salary:</strong> {{ employee.basic_salary }}</p>
-        <p><strong>DA:</strong> {{ employee.da }}</p>
-        <p><strong>HRA:</strong> {{ employee.hra }}</p>
-        <p><strong>Allowances:</strong> 
-            {% if employee.allowances.all %}
-                <ul>
-                    {% for allowance in employee.allowances.all %}
-                        <li>{{ allowance.name }} (Amount: {{ allowance.amount }})</li>
-                    {% endfor %}
-                </ul>
-            {% else %}
-                N/A
-            {% endif %}
-        </p>
+<style>
+    .detail-table {
+        width: 100%;
+        border-collapse: collapse;
+        background-color: #fff;
+        margin-bottom: 20px;
+    }
+
+    .detail-table th,
+    .detail-table td {
+        border: 1px solid #dee2e6;
+        padding: 8px 12px;
+        vertical-align: middle;
+    }
+
+    .detail-table th {
+        background-color: #f8f9fa;
+        font-weight: 600;
+        width: 25%;
+        color: #495057;
+    }
+</style>
+
+<div class="card">
+    <div class="card-body p-0">
+        <table class="detail-table">
+            <tbody>
+                <tr>
+                    <th>Full Name</th>
+                    <td>{{ employee.full_name }}</td>
+                    <th>Employee Code</th>
+                    <td>{{ employee.employee_code }}</td>
+                </tr>
+                <tr>
+                    <th>Designation</th>
+                    <td>{{ employee.designation.name|default:"-" }}</td>
+                    <th>Department</th>
+                    <td>{{ employee.department.name|default:"-" }}</td>
+                </tr>
+                <tr>
+                    <th>Date of Joining</th>
+                    <td>{{ employee.joining_date }}</td>
+                    <th>Employment Type</th>
+                    <td>{{ employee.get_employment_type_display }}</td>
+                </tr>
+                <tr>
+                    <th>Contact Number</th>
+                    <td>{{ employee.contact_number|default:"-" }}</td>
+                    <th>Email</th>
+                    <td>{{ employee.user.email|default:"-" }}</td>
+                </tr>
+                <tr>
+                    <th>PF Number</th>
+                    <td>{{ employee.pf_number|default:"-" }}</td>
+                    <th>ESI Number</th>
+                    <td>{{ employee.esi_number|default:"-" }}</td>
+                </tr>
+                <tr>
+                    <th>Aadhar Number</th>
+                    <td>{{ employee.aadhar_number|default:"-" }}</td>
+                    <th>Date of Birth</th>
+                    <td>{{ employee.date_of_birth|default:"-" }}</td>
+                </tr>
+                <tr>
+                    <th>Sex</th>
+                    <td>{{ employee.get_sex_display|default:"-" }}</td>
+                    <th>Nationality</th>
+                    <td>{{ employee.nationality|default:"-" }}</td>
+                </tr>
+                <tr>
+                    <th>Address</th>
+                    <td colspan="3">{{ employee.address|linebreaksbr }}</td>
+                </tr>
+                <tr>
+                    <th>Previous Experience</th>
+                    <td colspan="3">{{ employee.previous_experience|default:"-"|linebreaksbr }}</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="px-3 pt-3">
+            <h5 style="border-bottom: 2px solid #eee; padding-bottom: 10px;">Compensation Details</h5>
+        </div>
+
+        <table class="detail-table">
+            <tbody>
+                <tr>
+                    <th>Basic Salary</th>
+                    <td>{{ employee.basic_salary }}</td>
+                </tr>
+                <tr>
+                    <th>Allowances</th>
+                    <td>
+                        {% if employee.allowances.all %}
+                        <table class="table table-sm table-bordered mb-0" style="width: auto;">
+                            <thead>
+                                <tr>
+                                    <th>Allowance</th>
+                                    <th>Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for allowance in employee.employeeallowance_set.all %}
+                                <tr>
+                                    <td>{{ allowance.allowance.name }}</td>
+                                    <td>{{ allowance.amount }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                        {% else %}
+                        N/A
+                        {% endif %}
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
     </div>
-    <div class="form-actions">
-        <a href="{% url 'employee_edit' employee.id %}" class="btn">Edit Employee</a>
-        <a href="{% url 'employee_list' %}" class="btn btn-secondary">Back to Employee List</a>
-    </div>
+</div>
+
+<div class="form-actions mt-3">
+    <a href="{% url 'employee_edit' employee.id %}" class="btn btn-primary">Edit Employee</a>
+    <a href="{% url 'employee_list' %}" class="btn btn-secondary">Back to Employee List</a>
+</div>
 {% endblock %}

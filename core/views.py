@@ -179,7 +179,24 @@ def dashboard(request):
         'birthdays_tomorrow': birthdays_tomorrow,
         'birthdays_today_count': birthdays_today.count(),
         'birthdays_tomorrow_count': birthdays_tomorrow.count(),
+        'retiring_count': 0, # Placeholder
+        'checked_in_count': Attendance.objects.filter(date=today).count(),
     }
+    
+    # Calculate Retiring Count (Next 90 days)
+    limit_date = today + datetime.timedelta(days=90)
+    retiring_count = 0
+    all_employees = Employee.objects.all() # Optimization: values_list('date_of_birth') if large
+    for emp in all_employees:
+        if emp.date_of_birth:
+            try:
+                # Calculate retirement date (DOB + 58 years)
+                retirement_date = emp.date_of_birth.replace(year=emp.date_of_birth.year + 58)
+                if today <= retirement_date <= limit_date:
+                    retiring_count += 1
+            except ValueError:
+                pass
+    context['retiring_count'] = retiring_count
     
     return render(request, 'core/dashboard.html', context)
 
@@ -257,6 +274,45 @@ def employee_list(request):
             Q(department__name__icontains=search_query) |
             Q(designation__name__icontains=search_query)
         )
+    
+    # Filter functionality
+    filter_type = request.GET.get('filter')
+    if filter_type == 'retiring':
+        today = datetime.date.today()
+        # Retiring age = 58
+        # We look for people turning 58 in the next 90 days.
+        # This means their DOB + 58 years is between today and today + 90 days.
+        # Converting to DOB range: 
+        # DOB >= today - 58 years
+        # DOB <= today + 90 days - 58 years
+        start_date_58_years_ago = today - datetime.timedelta(days=58*365.25) # Approx
+        # A more precise way for "turning 58":
+        # Target retirement date range: [today, today+90]
+        # For each target date T, the person born on T - 58 years retires then.
+        # So we look for DOB in range [today - 58y, today+90d - 58y] roughly.
+        
+        # Let's use strict date construction:
+        # retirement_date = dob.replace(year=dob.year + 58)
+        # We want today <= retirement_date <= today + 90
+        
+        # Accessing all and filtering in python might be safer/easier for "replace year" logic 
+        # than complex DB queries unless the DB supports age calculation well.
+        # For simplicity and typical small/med DB size, Python filtering is fine.
+        
+        filtered_ids = []
+        limit_date = today + datetime.timedelta(days=90)
+        
+        for emp in employees:
+            if emp.date_of_birth:
+                try:
+                    retirement_date = emp.date_of_birth.replace(year=emp.date_of_birth.year + 58)
+                    if today <= retirement_date <= limit_date:
+                        filtered_ids.append(emp.id)
+                except ValueError:
+                    # Handle leap years if any edge case (e.g. born Feb 29, 58 years later?)
+                    pass
+        
+        employees = employees.filter(id__in=filtered_ids)
     
     # Sorting functionality
     sort_by = request.GET.get('sort', 'employee_code')  # Default sort
