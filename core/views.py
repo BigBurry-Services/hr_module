@@ -1544,11 +1544,11 @@ def monthly_salary_report(request):
             # Iterate through each day of the leave
             curr_date = l_start
             while curr_date <= l_end:
-                # Only count as leave if it's NOT a holiday
-                if curr_date not in holiday_set:
-                    total_leave_days += 1
-                    if leave.leave_type == 'Unpaid':
-                        unpaid_leave_days += 1
+                # Count as leave matching Summary View logic (Leave > Holiday priority)
+                # Summary view counts it as Unpaid Leave even if it is a holiday
+                total_leave_days += 1
+                if leave.leave_type == 'Unpaid':
+                    unpaid_leave_days += 1
                 curr_date += datetime.timedelta(days=1)
         
         basic = emp.basic_salary
@@ -1582,6 +1582,7 @@ def monthly_salary_report(request):
         # Iterate all days in month
         current_iter_date = start_date
         present_on_working_days = 0
+        absent_days_count = 0
         
         while current_iter_date <= end_date:
             day_record = att_map.get(current_iter_date)
@@ -1633,41 +1634,54 @@ def monthly_salary_report(request):
                  # Check Holiday (Only if not Leave)
                  elif current_iter_date in holiday_set:
                      total_regular_seconds += 28800
+                 
+                 else:
+                     # No Record, No Leave, No Holiday -> Absent
+                     absent_days_count += 1
             
             current_iter_date += datetime.timedelta(days=1)
 
-        # Match Summary View 'Total Working Hours' which is Regular Hours Only
-        # (Overtime is shown in a separate column)
-        working_hours_decimal = total_regular_seconds / 3600.0
-        wh_hours = int(working_hours_decimal)
-        wh_minutes = int((working_hours_decimal - wh_hours) * 60)
-        total_working_hours_str = f"{wh_hours:02d}:{wh_minutes:02d}"
+        # Minute-Based Calculation
+        total_grand_seconds = total_regular_seconds + total_overtime_seconds
+        total_minutes_worked = int(total_grand_seconds / 60)
         
-        # OT Hours
-        overtime_hours = Decimal(total_overtime_seconds) / Decimal(3600)
+        # OT Hours Display (HH:MM)
+        ot_h = int(total_overtime_seconds // 3600)
+        ot_m = int((total_overtime_seconds % 3600) // 60)
+        overtime_hours_str = f"{ot_h:02d}:{ot_m:02d}"
+        
         # OT Amount: Daily / 8 (Net) * Hours
-        ot_amount = (daily_rate / Decimal(8)) * overtime_hours
+        # We already calculated ot_amount correctly based on minutes above using rate
+        # ot_amount = Decimal(ot_minutes) * per_minute_wage
+        # Per Minute Wage (Rounded to 2 decimals)
+        per_minute_wage = Decimal(0)
+        daily_rate = basic / Decimal(30)
+        if basic > 0:
+            per_minute_wage = (daily_rate / Decimal(480)).quantize(Decimal("0.01"))
         
-        # Absent calc: Working Days - Present Days (Excl Holidays) - Leave Days (Excl Holidays)
-        absent_days = working_days_in_month - present_on_working_days - total_leave_days
-        if absent_days < 0: absent_days = 0
+        # Calculate OT Minutes for Amount
+        ot_minutes = int(total_overtime_seconds / 60)
         
-        leave_cut_amount = unpaid_leave_days * daily_rate
-        absent_deduction = absent_days * daily_rate
+        # Total Earned (Reg + OT) - Source of Truth for Gross
+        total_earned = Decimal(total_minutes_worked) * per_minute_wage
+        
+        # OT Amount
+        ot_amount = Decimal(ot_minutes) * per_minute_wage
+        
+        # Earned Basic (Regular Only)
+        earned_basic_regular = total_earned - ot_amount
         
         total_allowances = sum([ea.amount for ea in emp.employeeallowance_set.all()])
         
-        # Gross Salary = Basic + Allowances + OT Amount
-        gross_salary = basic + total_allowances + ot_amount
+        # Gross = Total Earned + Allowances
+        gross_salary = total_earned + total_allowances
         
         pf = Decimal(0)
         esi = Decimal(0)
         
-        earned_basic = basic - leave_cut_amount - absent_deduction
-        if earned_basic < 0: earned_basic = Decimal(0)
-        
+        # PF is likely based on Total Basic Earned (including OT in this specific payroll logic based on user request)
         if basic <= 15000:
-             pf = earned_basic * Decimal('0.12')
+             pf = total_earned * Decimal('0.12')
         
         if basic <= 21000:
              esi = gross_salary * Decimal('0.0075')
@@ -1675,10 +1689,21 @@ def monthly_salary_report(request):
         advances_total = SalaryAdvance.objects.filter(employee=emp, date__range=[start_date, end_date]).aggregate(sum=Sum('amount'))['sum'] or 0
         
         # Total Deductions
-        total_deductions = pf + esi + leave_cut_amount + absent_deduction + advances_total
+        total_deductions = pf + esi + advances_total
         
         # Net Salary
         net_salary = gross_salary - total_deductions
+        
+        # Leaves & Leave Cut Amount
+        # Leave Cut should reflect loss of Regular Pay
+        leave_cut_amount = basic - earned_basic_regular
+        if leave_cut_amount < 0: leave_cut_amount = 0
+        
+        # Display purposes
+        working_hours_decimal = total_regular_seconds / 3600.0
+        wh_hours = int(working_hours_decimal)
+        wh_minutes = int((working_hours_decimal - wh_hours) * 60)
+        total_working_hours_str = f"{wh_hours:02d}:{wh_minutes:02d}"
         
         report_data.append({
             'code': emp.employee_code,
@@ -1686,18 +1711,18 @@ def monthly_salary_report(request):
             'doj': emp.joining_date,
             'basic': basic,
             'allowances': total_allowances,
-            'overtime_hours': round(overtime_hours, 1),
+            'overtime_hours': overtime_hours_str,
             'overtime_amount': round(ot_amount, 2),
             'salary_advance': advances_total,
             'esic': round(esi, 2),
             'pf': round(pf, 2),
-            # Leaves = Unpaid Leaves + Absent Days
-            'leaves': unpaid_leave_days + absent_days,
-            'leave_cut_amount': round(leave_cut_amount + absent_deduction, 2),
+            'leaves': unpaid_leave_days,
+            'leave_cut_amount': round(leave_cut_amount, 2),
             'working_hours': total_working_hours_str,
             'total_salary': round(gross_salary, 2),
             'net_salary': round(net_salary, 2)
         })
+
 
     context = {
         'report_data': report_data,
