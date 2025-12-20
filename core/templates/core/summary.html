@@ -303,33 +303,28 @@
                 <td>{{ summary_data.daily_wage|floatformat:2 }}</td>
             </tr>
             <tr>
-                <td><strong>Per Minute Charge</strong></td>
+                <td><strong>Per Minute Wage</strong></td>
                 <td>{{ summary_data.per_minute_wage|floatformat:2 }}</td>
             </tr>
             <tr>
-                <td><strong>Total Working Days</strong></td>
-                <td>{{ summary_data.total_working_days }}</td>
-            </tr>
-            <tr>
-                <td><strong>Total Present Days</strong></td>
-                <td>{{ summary_data.total_present_days }}</td>
-            </tr>
-            <tr>
-            <tr>
-                <td><strong>Total Absent Days</strong></td>
-                <td>{{ summary_data.total_absent_days }}</td>
+                <td><strong>Total Unpaid Leaves</strong></td>
+                <td>{{ summary_data.total_unpaid_leaves }}</td>
             </tr>
             <tr>
                 <td><strong>Total Working Hours</strong></td>
                 <td>{{ summary_data.total_working_hours }}</td>
             </tr>
             <tr>
-                <td><strong>Total Minutes Worked</strong></td>
-                <td>{{ summary_data.total_minutes_worked }}</td>
-            </tr>
-            <tr>
                 <td><strong>Total Overtime Hours</strong></td>
                 <td>{{ summary_data.total_overtime_hours }}</td>
+            </tr>
+            <tr>
+                <td><strong>Total Hours (Reg + OT)</strong></td>
+                <td>{{ summary_data.total_gross_hours }}</td>
+            </tr>
+            <tr>
+                <td><strong>Total Minutes Worked</strong></td>
+                <td>{{ summary_data.total_minutes_worked }}</td>
             </tr>
         </tbody>
     </table>

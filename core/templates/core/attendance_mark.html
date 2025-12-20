@@ -190,7 +190,6 @@
                     {% endif %}
                 </td>
                 <td>
-                    {% if not attendance and not leave %}
                     <div style="display: flex; gap: 0.5rem; align-items: center;">
                         <select name="leave_type_{{ employee.id }}" class="form-select form-select-sm"
                             style="width: auto; padding: 0.25rem 2rem 0.25rem 0.5rem; font-size: 0.8rem;">
@@ -205,7 +204,6 @@
                             Mark
                         </button>
                     </div>
-                    {% endif %}
                 </td>
             </tr>
             {% endwith %}

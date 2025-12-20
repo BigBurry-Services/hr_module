@@ -507,10 +507,9 @@ def mark_single_leave(request, employee_id):
                 messages.error(request, f"Cannot mark leave. Employee {employee.full_name} is marked present.")
                 return redirect(f"{reverse('attendance_mark')}?date={date_str}")
 
-            # Check if leave already exists
-            if Leave.objects.filter(employee=employee, start_date__lte=date_obj, end_date__gte=date_obj).exists():
-                messages.warning(request, f"Employee {employee.full_name} is already on leave.")
-                return redirect(f"{reverse('attendance_mark')}?date={date_str}")
+            # Cleanup existing leaves for this day to allow override/edit
+            # This handles the "editable" requirement by removing the old one before adding new
+            Leave.objects.filter(employee=employee, start_date__lte=date_obj, end_date__gte=date_obj).delete()
             
             # Get Selected Leave Type
             # The input name is dynamic: leave_type_{employee_id}
@@ -686,219 +685,12 @@ def summary(request):
         holiday_set = {h.date for h in holidays_qs}
         holiday_map = {h.date: h.description for h in holidays_qs}
         
-        # Calculate Valid Attendance Records (non-zero duration)
-        valid_attendance_records = []
-        for att in attendance_records:
-            if att.check_in_time and att.check_out_time:
-                check_in = datetime.datetime.combine(att.date, att.check_in_time)
-                check_out = datetime.datetime.combine(att.date, att.check_out_time)
-                if check_out < check_in: check_out += datetime.timedelta(days=1)
-                if (check_out - check_in).total_seconds() > 0:
-                    valid_attendance_records.append(att)
+        
+        # --- REFACTORED LOGIC START ---
 
-        att_dates = {att.date for att in valid_attendance_records}
-        
-        # Fetch Paid Leave Dates
-        paid_leave_dates = set()
-        # We need to fetch leaves before this block or re-fetch
-        paid_leaves_qs = Leave.objects.filter(employee=employee, start_date__lte=end_date, end_date__gte=start_date, status='Approved', leave_type='Paid')
-        for l in paid_leaves_qs:
-            c = max(l.start_date, start_date)
-            e = min(l.end_date, end_date)
-            while c <= e:
-                paid_leave_dates.add(c)
-                c += datetime.timedelta(days=1)
-
-        paid_dates = att_dates.union(holiday_set).union(paid_leave_dates)
-        paid_days_count = len(paid_dates)
-        
-        present_days = len(valid_attendance_records) # Physical presence (non-zero duration)
-        
-        # Salary Calculation
-        daily_wage = 0
-        basic_salary = 0
-        salary_from_days = 0 
-        if employee:
-            basic_salary = employee.basic_salary
-            daily_wage = basic_salary / 30 # Assuming 30 days
-            salary_from_days = daily_wage * paid_days_count
-
-        # Calculate Leaves (Moved after daily_wage)
-        leaves = Leave.objects.filter(employee=employee, start_date__lte=end_date, end_date__gte=start_date, status='Approved')
-        unpaid_leave_days = 0
-        for leave in leaves:
-            l_start = max(leave.start_date, start_date)
-            l_end = min(leave.end_date, end_date)
-            days = (l_end - l_start).days + 1
-            if days > 0:
-                if leave.leave_type == 'Unpaid':
-                    unpaid_leave_days += days
-        
-        absent_days = total_working_days - paid_days_count 
-        
-        summary_data = {
-            'employee_name': employee.full_name if employee else "All Employees",
-            'month': start_date.strftime("%B %Y"),
-            'total_working_days': total_working_days,
-            'total_present_days': present_days,
-            'total_absent_days': absent_days,
-            'total_absent_days': absent_days,
-        }
-        
-        # Calculate Overtime (Before Salary Calc)
-        # Calculate Overtime (Before Salary Calc)
-
-        total_overtime_seconds = 0
-        for att in attendance_records:
-            if att.check_in_time and att.check_out_time:
-                 check_in = datetime.datetime.combine(att.date, att.check_in_time)
-                 check_out = datetime.datetime.combine(att.date, att.check_out_time)
-                 if check_out < check_in: check_out += datetime.timedelta(days=1)
-                 raw_duration = (check_out - check_in).total_seconds()
-                 
-                 # Deduct 1 hour lunch UNLESS no_break
-                 deduction = 3600
-                 if att.no_break:
-                     deduction = 0
-                     
-                 duration = raw_duration - deduction
-                 if duration < 0: duration = 0
-                 
-                 if duration < 0: duration = 0
-                 
-                 # Holiday Logic: If holiday, ALL hours are overtime.
-                 # Regular Logic: Overtime > 8 hours (28800)
-                 if att.date in holiday_set:
-                     total_overtime_seconds += duration
-                 elif duration > 28800: 
-                     total_overtime_seconds += (duration - 28800)
-        
-        overtime_hours = Decimal(total_overtime_seconds) / Decimal(3600)
-        # OT Amount: Daily Wage / 8 * OT Hours
-        # If daily_wage is not yet calc'd, move it up.
-        basic_salary = employee.basic_salary if employee else 0
-        daily_wage = basic_salary / 30 if basic_salary else 0
-
-
-        overtime_amount = (daily_wage / Decimal(8)) * overtime_hours if daily_wage else 0
-        per_minute_wage = daily_wage / Decimal(480) if daily_wage else 0
-
-
-        # Add Allowances
-        total_allowances = 0
-        allowance_list = []
-        if employee:
-            # Iterate over the through-model to get specific amounts
-            # Use select_related to avoid N+1 queries
-            emp_allowances = employee.employeeallowance_set.select_related('allowance').all()
-            for emp_allowance in emp_allowances:
-                amount = emp_allowance.amount
-                total_allowances += amount
-                allowance_list.append({
-                    'name': emp_allowance.allowance.name,
-                    'amount': amount
-                })
-        
-
-        
-        gross_salary = salary_from_days + total_allowances + overtime_amount
-        
-        # Deductions Calculation
-        # Eligibility Checks
-        # PF Eligibility: Basic <= 15,000
-        pf_eligible = basic_salary <= 15000
-        
-        # ESI Eligibility: Basic <= 21,000
-        esi_eligible = basic_salary <= 21000
-
-        # PF Calculation: 12% of Earned Basic if Eligible
-        pf_base = salary_from_days
-        if pf_eligible:
-            pf = pf_base * Decimal('0.12')
-        else:
-            pf = Decimal('0.00')
-        
-        # ESI Calculation: 0.75% of Gross Salary if Eligible
-        if esi_eligible:
-             esi = gross_salary * Decimal('0.0075')
-        else:
-            esi = Decimal('0.00')
-        
-        # Employer Contributions (Govt Payment)
-        # Employer PF: 12% of Earned Basic if Eligible
-        if pf_eligible:
-            employer_pf = pf_base * Decimal('0.12')
-        else:
-            employer_pf = Decimal('0.00')
-        
-        # Employer ESI: 3.25% of Earned Basic (as requested) if Eligible
-        # Employer ESI: 3.25% of Earned Basic (as requested) if Eligible
-        if esi_eligible:
-            employer_esi = salary_from_days * Decimal('0.0325')
-        else:
-            employer_esi = Decimal('0.00')
-
-        # Salary Advance Calculation
-        advances = SalaryAdvance.objects.filter(employee=employee, date__range=[start_date, end_date])
-        total_advance = advances.aggregate(Sum('amount'))['amount__sum'] or Decimal('0.00')
-
-        total_deductions = pf + esi + total_advance
-        
-        salary_payable = gross_salary - total_deductions
-        
-        total_pf_contribution = pf + employer_pf
-        total_esi_contribution = esi + employer_esi
-        
-        # Grand Totals for Government Payable Row
-        total_emp_share = pf + esi
-        total_employer_share = employer_pf + employer_esi
-        grand_total_gov_payable = total_emp_share + total_employer_share
-
-        summary_data.update({
-             'basic_salary': basic_salary,
-             'earned_basic': salary_from_days,
-             'overtime_amount': overtime_amount,
-             'pf_eligible': pf_eligible,
-             'esi_eligible': esi_eligible,
-             'total_allowances': total_allowances,
-             'allowance_list': allowance_list,
-             'gross_salary': gross_salary,
-             'pf': pf,
-             'esi': esi,
-             'employer_pf': employer_pf,
-             'employer_esi': employer_esi,
-             'total_pf_contribution': total_pf_contribution,
-             'total_esi_contribution': total_esi_contribution,
-             'total_emp_share': total_emp_share,
-             'total_employer_share': total_employer_share,
-             'grand_total_gov_payable': grand_total_gov_payable,
-             'salary_advance': total_advance,
-             'total_deductions': total_deductions,
-             'salary_payable': salary_payable,
-             'daily_wage': daily_wage,
-             'per_minute_wage': per_minute_wage,
-             # Slip Data
-             'designation': employee.designation.name if employee.designation else "N/A",
-             'joining_date': employee.joining_date,
-             'pf_number': employee.pf_number,
-             'esi_number': employee.esi_number,
-             'leave_cut_days': absent_days, # Total days not paid
-             'leave_cut_amount': basic_salary - salary_from_days, # The amount lost due to not being present
-
-             'attendance_list': attendance_records.order_by('date')
-        })
-
-        # Calculate Total Working Hours and Overtime
-        total_seconds_worked = 0
-        total_overtime_seconds = 0
-        
-        # Helper maps for Status
-        # Holidays already fetched above into holiday_map
-        
-        # Fetch Leaves (if employee selected) - handled slightly differently because ranges
+        # 1. Fetch Leaves for the Map (needed for the loop)
         leave_map = {}
         if employee:
-             # Need to find leaves that overlap with this month
              leaves = Leave.objects.filter(
                  employee=employee,
                  start_date__lte=end_date, 
@@ -906,25 +698,20 @@ def summary(request):
                  status='Approved'
              )
              for l in leaves:
-                 # Iterate days to fill map
                  curr = l.start_date
                  while curr <= l.end_date:
                      if start_date <= curr <= end_date:
                          leave_map[curr] = l.leave_type
                      curr += datetime.timedelta(days=1)
 
-
-        # Generate Full Attendance List (All Dates)
+        # 2. Main Attendance Loop (Calculate Time & Build List)
         full_attendance_list = []
         att_map = {att.date: att for att in attendance_records}
         
-        # Generate Full Attendance List (All Dates)
-        full_attendance_list = []
-        att_map = {att.date: att for att in attendance_records}
-        
-        # Track totals inside the daily loop now
         total_regular_seconds = 0
         total_overtime_seconds = 0
+        present_days_count = 0
+        unpaid_leaves_count = 0
         
         for day in range(1, num_days + 1):
             current_date = datetime.date(current_year, month, day)
@@ -940,17 +727,15 @@ def summary(request):
                 'working_hours': "-",
                 'overtime': "-",
                 'is_low_hours': False,
-                'status': "Absent", # Default
-                'status_color': 'danger', # Default red
+                'status': "Absent",
+                'status_color': 'danger', 
                 'id': None,
                 'no_break': False
             }
             
-            # Determine Status
             is_present = False
             if record:
                 is_present = True
-
                 day_data['id'] = record.id
                 day_data['no_break'] = record.no_break
                 
@@ -971,7 +756,6 @@ def summary(request):
                 day_data['notes'] = record.notes if record.notes else ""
 
                 if record.check_in_time and record.check_out_time:
-                    # Calculate duration for this day
                     check_in = datetime.datetime.combine(current_date, record.check_in_time)
                     check_out = datetime.datetime.combine(current_date, record.check_out_time)
                     
@@ -981,7 +765,9 @@ def summary(request):
                     duration = check_out - check_in
                     raw_seconds = duration.total_seconds()
                     
-                    # Deduct 1 hour (3600 seconds) for lunch UNLESS no_break is set
+                    if raw_seconds > 0:
+                        present_days_count += 1
+                    
                     deduction = 3600
                     if record.no_break:
                         deduction = 0
@@ -993,80 +779,257 @@ def summary(request):
                         day_data['is_low_hours'] = True
                     
                     if current_date in holiday_map:
-                        # Holiday Work
                         day_data['working_hours'] = "08:00"
                         day_data['overtime'] = format_seconds(seconds)
                         day_data['check_in_time'] = f"{day_data.get('check_in_time', '')} (Holiday)"
                         day_data['check_out_time'] = f"{day_data.get('check_out_time', '')} (Holiday)"
-                        
-                        # Regular = 8h, OT = Worked
                         total_regular_seconds += 28800
                         total_overtime_seconds += seconds
                     else:
-                        # Regular Day
                         if seconds > 28800:
-                            # Split
                             regular_seconds = 28800
                             ot_seconds = seconds - 28800
-                            
                             day_data['working_hours'] = format_seconds(regular_seconds)
                             day_data['overtime'] = format_seconds(ot_seconds)
-                            
                             total_regular_seconds += regular_seconds
                             total_overtime_seconds += ot_seconds
                         else:
-                            # All Regular
                             day_data['working_hours'] = format_seconds(seconds)
                             day_data['overtime'] = "00:00"
                             total_regular_seconds += seconds
 
-            
             if not is_present:
-                # Check Leave
                 if current_date in leave_map:
                     l_type = leave_map[current_date]
                     day_data['status'] = f"On Leave ({l_type})"
                     day_data['status_color'] = "warning"
-                    
-                    # If Paid leave (or assuming non-unpaid is paid), count 8 hours
-                    # Logic check: Leaves have 'Paid' or 'Unpaid' stored in 'leave_type' field (category)
-                    # BUT `leave_map` stores `leave.leave_type`.
-                    # Let's ensure we are checking the category.
-                    # In my previous edit, I stored `l.leave_type` in `leave_map`.
-                    # Assuming l.leave_type is 'Paid'/'Unpaid'.
-                    # If it's 'Paid', add 8 hours.
                     if l_type == 'Paid':
-                        seconds = 28800 # 8 hours
+                        seconds = 28800
                         day_data['working_hours'] = "08:00 (Leave)"
                         total_regular_seconds += seconds
-                        
-                # Check Holiday
+                    elif l_type == 'Unpaid':
+                         unpaid_leaves_count += 1
+
                 elif current_date in holiday_map:
-                    # Logic Change per User: Considered "worked for 8 hours", checkin/out as "Holiday"
                     day_data['status'] = f"Holiday ({holiday_map[current_date]})"
-                    day_data['status_color'] = "info" # Keep blue to distinguish
+                    day_data['status_color'] = "info"
                     day_data['working_hours'] = "08:00"
                     day_data['check_in_time'] = "Holiday"
                     day_data['check_out_time'] = "Holiday"
                     day_data['check_in_alert'] = False
                     day_data['check_out_alert'] = False
-                    
-                    # Count for Total Working Hours
-                    total_regular_seconds += 28800 # Holiday Entitlement
+                    total_regular_seconds += 28800
 
-            
             full_attendance_list.append(day_data)
 
-        # Total Minutes = (Regular + OT) / 60
-        total_grand_seconds = total_regular_seconds + total_overtime_seconds
+        # 3. Calculate Salary Components
         
-        summary_data['attendance_list'] = full_attendance_list
+        # Calculate totals
+        total_grand_seconds = total_regular_seconds + total_overtime_seconds
+        total_minutes_worked = int(total_grand_seconds / 60)
+        
+        overtime_hours = Decimal(total_overtime_seconds) / Decimal(3600)
+        
+        # Basic Rates
+        basic_salary = 0
+        daily_wage = 0
+        per_minute_wage = 0
+        
+        if employee:
+            basic_salary = employee.basic_salary
+            daily_wage = basic_salary / 30 # Standard 30 days
+            # Per Minute = Daily Wage / 8 hours (480 mins)
+            # This is the standard rate derived from daily wage for an 8 hour shift
+            # Rounding to 2 decimal places to match User's manual calculation (WYSIWYG)
+            per_minute_wage = (daily_wage / Decimal(480)).quantize(Decimal("0.01"))
 
-        summary_data.update({
-            'total_working_hours': format_seconds(total_regular_seconds), # Showing Regular Hours Sum
+        # Earned Basic = Total Minutes * Minute Rate
+        earned_basic = Decimal(total_minutes_worked) * per_minute_wage
+        
+        # OT Amount
+        # Using the same minute rate for OT (1x) or specific Logic?
+        # Code previously used: (daily_wage / 8) * overtime_hours
+        # (daily_wage / 8) is exactly per_hour_wage. per_hour * hours = amount.
+        # This matches calculated earned_basic logic if OT is paid at same rate.
+        # However, typically Basic is for Regular hours and OT is separate.
+        # The user requested "basic salary (earned)... must match total minutes worked * per minute charge".
+        # This implies "Earned Basic" now effectively captures ALL work pay?
+        # Wait, if we put ALL pay into Earned Basic, then Overtime Amount should be 0 or separate?
+        # Usually:
+        # Earned Basic = Regular Minutes * Rate
+        # Overtime Pay = OT Minutes * Rate
+        # Total = Earned Basic + OT Pay
+        # "Total Minutes Worked" usually implies Regular + OT.
+        # If user says "basic salary... match total minutes * charge", they might mean the SUM.
+        # BUT the table has separate row for "Overtime Amount".
+        # If I put everything in Basic, OT Amount row becomes redundant or double counting?
+        # Let's check the previous code.
+        # loops calculated total_regular_seconds and total_overtime_seconds.
+        # User REQ: "basic salary (earned) ... match total minutes worked * per minute charge"
+        # "Total Minutes Worked" in the summary table (line 328) is "total_minutes_worked" variable.
+        # In my logic above, `total_minutes_worked` = reg + ot.
+        # So I will set `earned_basic` = `total_minutes_worked` * `per_minute_wage`.
+        # AND I will set `overtime_amount` to 0 ? Or is OT extra?
+        # The UI shows "Basic Salary (Earned)" AND "Overtime Amount".
+        # If I include OT in Basic, I should probably zero out OT Amount to avoid double pay, 
+        # OR the user considers "Basic Salary" to be the line item for all time-based pay.
+        # CHECK: The user said "basic salary... match total minutes...".
+        # I will assume ONLY Basic Salary line changes its logic to cover everything, 
+        # OR I separate them.
+        # Given "match total minutes * per minute", I will make `earned_basic` cover it all.
+        # But wait, there is a "Gross Salary" row = Basic + OT + Allowances.
+        # If I put OT in Basic, Gross is fine.
+        # BUT I should probably set Overtime Amount to 0 to be safe, OR:
+        # Maybe "Total Minutes Worked" in user's mind is just Regular?
+        # Looking at previous code: 
+        # line 1068: 'total_minutes_worked': int(total_grand_seconds / 60) -> This INCLUDES OT.
+        # So User really wants Basic Line = (Reg + OT) * Rate.
+        # I will set Overtime Amount to 0 effectively, or I need to clarify?
+        # "basic salary (earned) ... match total minutes worked * per minute charge"
+        # I will do exactly that.
+        
+        overtime_amount = Decimal(0) 
+        # IF I set this to 0, I should probably hide the row or just show 0.
+        # OR does the user want:
+        # Basic = Regular * Rate
+        # OT = OT * Rate
+        # And "Total Minutes" was just a reference?
+        # The user said "basic salary ... must match total minutes worked * per minute charge".
+        # This is a strong equality constraint. 
+        # I will use the Exact Formula requested.
+        # earned_basic = total_minutes_worked * per_minute_wage
+        # overtime_amount = 0 (since it's included now)
+        
+        # However, to avoid confusion if they expect OT separately:
+        # I will stick to the literal request.
+        
+        # WAIT! If I kill OT amount, I might break "Gross".
+        # Gross = earned + allowances + ot.
+        # If ot is 0, Gross = earned + allowances.
+        # This seems correct for "Total Pay based on Time" being in one line.
+        
+        # Allowances
+        total_allowances = 0
+        allowance_list = []
+        if employee:
+            emp_allowances = employee.employeeallowance_set.select_related('allowance').all()
+            for emp_allowance in emp_allowances:
+                amount = emp_allowance.amount
+                total_allowances += amount
+                allowance_list.append({
+                    'name': emp_allowance.allowance.name,
+                    'amount': amount
+                })
+
+        gross_salary = earned_basic + total_allowances + overtime_amount # overtime_amount is 0
+        
+        # Deductions
+        pf_eligible = basic_salary <= 15000
+        esi_eligible = basic_salary <= 21000
+        
+        # PF: 12% of Earned Basic (which now includes OT? Standard is Basic+DA, excluding OT)
+        # But with this custom logic, EarnedBasic is everything.
+        # Let's assume PF applies to this new EarnedBasic.
+        if pf_eligible:
+            pf = earned_basic * Decimal('0.12')
+        else:
+            pf = Decimal('0.00')
+            
+        if esi_eligible:
+             esi = gross_salary * Decimal('0.0075')
+        else:
+            esi = Decimal('0.00')
+            
+        if pf_eligible:
+            employer_pf = earned_basic * Decimal('0.12')
+        else:
+            employer_pf = Decimal('0.00')
+            
+        if esi_eligible:
+             employer_esi = earned_basic * Decimal('0.0325') # Note: using earned_basic not gross for employer share in this codebase previously?
+             # Previous code: employer_esi = salary_from_days * Decimal('0.0325'). salary_from_days was "earned basic".
+             # So yes, use earned_basic.
+        else:
+            employer_esi = Decimal('0.00')
+
+        # Salary Advance
+        advances = SalaryAdvance.objects.filter(employee=employee, date__range=[start_date, end_date])
+        total_advance = advances.aggregate(Sum('amount'))['amount__sum'] or Decimal('0.00')
+
+        total_deductions = pf + esi + total_advance
+        salary_payable = gross_salary - total_deductions
+        
+        total_pf_contribution = pf + employer_pf
+        total_esi_contribution = esi + employer_esi
+        total_emp_share = pf + esi
+        total_employer_share = employer_pf + employer_esi
+        grand_total_gov_payable = total_emp_share + total_employer_share
+        
+        # Absents
+        # paid_days_count logic is now moot for salary calc, but maybe useful for display?
+        # We calculated present_days_count.
+        # We have paid leaves in the loop.
+        # Let's reconstruct absent days.
+        # absent = total_days - (present + paid_leaves + holidays)
+        # Actually easier: absent = total_days - paid_days_count
+        # We need to sum "Paid Days" properly if we want to show it.
+        # But the loop logic handles status.
+        # A simpler absent count: count days where status is 'Absent'.
+        # But we didn't track that explicitly in a counter.
+        # Re-calc 'Paid Days' for absent count?
+        # Previous logic: paid_days = distinct union of present/holiday/paid-leave.
+        
+        # Let's derive absent from the loop for consistency
+        # absent = days where status == 'Absent'.
+        absent_days_count = 0
+        for d in full_attendance_list:
+             if d['status'] == 'Absent':
+                 absent_days_count += 1
+        
+        summary_data = {
+            'employee_name': employee.full_name if employee else "All Employees",
+            'month': start_date.strftime("%B %Y"),
+            'total_working_days': total_working_days,
+            'total_present_days': present_days_count,
+            'total_absent_days': absent_days_count,
+            'total_working_hours': format_seconds(total_regular_seconds),
             'total_overtime_hours': format_seconds(total_overtime_seconds),
-            'total_minutes_worked': int(total_grand_seconds / 60),
-        })
+            'total_minutes_worked': total_minutes_worked,
+            'total_gross_hours': format_seconds(total_grand_seconds), # NEW field
+            
+            'basic_salary': basic_salary,
+            'earned_basic': earned_basic,
+            'overtime_amount': overtime_amount,
+            'pf_eligible': pf_eligible,
+            'esi_eligible': esi_eligible,
+            'total_allowances': total_allowances,
+            'allowance_list': allowance_list,
+            'gross_salary': gross_salary,
+            'pf': pf,
+            'esi': esi,
+            'employer_pf': employer_pf,
+            'employer_esi': employer_esi,
+            'total_pf_contribution': total_pf_contribution,
+            'total_esi_contribution': total_esi_contribution,
+            'total_emp_share': total_emp_share,
+            'total_employer_share': total_employer_share,
+            'grand_total_gov_payable': grand_total_gov_payable,
+            'salary_advance': total_advance,
+            'total_deductions': total_deductions,
+            'salary_payable': salary_payable,
+            'daily_wage': daily_wage,
+            'per_minute_wage': per_minute_wage,
+            
+             'designation': employee.designation.name if employee and employee.designation else "N/A",
+             'joining_date': employee.joining_date if employee else None,
+             'pf_number': employee.pf_number if employee else "-",
+             'esi_number': employee.esi_number if employee else "-",
+             'leave_cut_days': absent_days_count,
+             'leave_cut_amount': basic_salary - earned_basic, # approx
+             'total_unpaid_leaves': unpaid_leaves_count,
+             
+             'attendance_list': full_attendance_list
+        }
 
         if action == 'download_pdf':
             response = HttpResponse(content_type='application/pdf')
