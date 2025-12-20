@@ -647,7 +647,15 @@ def device_test_connection(request, pk):
 
 @hr_required
 def summary(request):
-    form = SalarySummaryForm(request.POST or None)
+    # Initialize form with POST or GET data
+    if request.method == 'POST':
+        form = SalarySummaryForm(request.POST)
+    elif request.GET.get('employee'):
+        # Check if we have GET params to prepopulate and auto-submit
+        form = SalarySummaryForm(request.GET)
+    else:
+        form = SalarySummaryForm()
+        
     summary_data = None
 
     # Helper to format seconds to HH:MM
@@ -656,10 +664,12 @@ def summary(request):
         minutes = int((seconds % 3600) // 60)
         return f"{hours:02d}:{minutes:02d}"
 
-    if request.method == 'POST' and form.is_valid():
+    # Verify logic applies to both POST and valid GET
+    if form.is_valid():
         month = int(form.cleaned_data['month'])
         year = int(form.cleaned_data['year'])
         employee = form.cleaned_data['employee']
+        # Default action to generate if via GET
         action = request.POST.get('action', 'generate')
         
         # Use the selected year
@@ -1706,6 +1716,7 @@ def monthly_salary_report(request):
         total_working_hours_str = f"{wh_hours:02d}:{wh_minutes:02d}"
         
         report_data.append({
+            'emp_id': emp.pk,
             'code': emp.employee_code,
             'name': emp.full_name,
             'doj': emp.joining_date,
