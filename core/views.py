@@ -159,26 +159,16 @@ def dashboard(request):
     
     # Birthday logic
     today = datetime.date.today()
-    tomorrow = today + datetime.timedelta(days=1)
     
-    # Employees with birthdays today
-    birthdays_today = Employee.objects.filter(
-        date_of_birth__month=today.month,
-        date_of_birth__day=today.day
-    ).exclude(date_of_birth__isnull=True)
-    
-    # Employees with birthdays tomorrow
-    birthdays_tomorrow = Employee.objects.filter(
-        date_of_birth__month=tomorrow.month,
-        date_of_birth__day=tomorrow.day
-    ).exclude(date_of_birth__isnull=True)
+    # Employees with birthdays this month
+    birthdays_this_month = Employee.objects.filter(
+        date_of_birth__month=today.month
+    ).exclude(date_of_birth__isnull=True).order_by('date_of_birth__day')
     
     context = {
         'total_employees': total_employees,
-        'birthdays_today': birthdays_today,
-        'birthdays_tomorrow': birthdays_tomorrow,
-        'birthdays_today_count': birthdays_today.count(),
-        'birthdays_tomorrow_count': birthdays_tomorrow.count(),
+        'birthdays_this_month': birthdays_this_month,
+        'birthdays_this_month_count': birthdays_this_month.count(),
         'retiring_count': 0, # Placeholder
         'checked_in_count': Attendance.objects.filter(date=today).count(),
     }
