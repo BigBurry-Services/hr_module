@@ -1596,6 +1596,14 @@ def leave_calendar(request):
     if year_param:
         current_year = int(year_param)
         
+    # Handle Year Rollover
+    while current_month > 12:
+        current_month -= 12
+        current_year += 1
+    while current_month < 1:
+        current_month += 12
+        current_year -= 1
+        
     holidays = Holiday.objects.filter(date__year=current_year, date__month=current_month)
     holiday_map = {h.date.day: h for h in holidays}
     
@@ -1724,7 +1732,18 @@ def salary_advance_list(request):
     advances = SalaryAdvance.objects.filter(
         date__month=selected_month, 
         date__year=selected_year
-    ).order_by('-date')
+    )
+    
+    # Search functionality
+    search_query = request.GET.get('search', '')
+    if search_query:
+        from django.db.models import Q
+        advances = advances.filter(
+            Q(employee__full_name__icontains=search_query) |
+            Q(employee__employee_code__icontains=search_query)
+        )
+        
+    advances = advances.order_by('-date')
     
     if request.method == 'POST':
         form = SalaryAdvanceForm(request.POST)
@@ -1742,7 +1761,8 @@ def salary_advance_list(request):
         'selected_month': selected_month,
         'selected_year': selected_year,
         'months': list(enumerate(calendar.month_name))[1:],
-        'years': range(current_date.year - 2, current_date.year + 3)
+        'years': range(current_date.year - 2, current_date.year + 3),
+        'search_query': search_query
     }
         
     return render(request, 'core/salary_advance_list.html', context)
