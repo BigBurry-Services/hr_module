@@ -1358,7 +1358,25 @@ def export_employees_csv(request):
     response['Content-Disposition'] = 'attachment; filename="employees.csv"'
 
     writer = csv.writer(response)
-    writer.writerow(['Employee Code', 'Full Name', 'Department', 'Designation', 'Joining Date', 'Mobile'])
+    writer.writerow([
+        'Employee Code', 
+        'Full Name', 
+        'Department', 
+        'Designation', 
+        'Joining Date', 
+        'Mobile',
+        'Address',
+        'Date of Birth',
+        'Aadhar Number',
+        'Sex',
+        'Nationality',
+        'State',
+        'Previous Experience',
+        'Employment Type',
+        'Basic Salary',
+        'PF Number',
+        'ESI Number'
+    ])
 
     employees = Employee.objects.all()
     for emp in employees:
@@ -1369,7 +1387,69 @@ def export_employees_csv(request):
             emp.designation.name if emp.designation else 'N/A',
             emp.joining_date,
             emp.contact_number,
+            emp.address,
+            emp.date_of_birth,
+            emp.aadhar_number,
+            emp.sex,
+            emp.nationality,
+            emp.state,
+            emp.previous_experience,
+            emp.employment_type,
+            emp.basic_salary,
+            emp.pf_number,
+            emp.esi_number,
         ])
+
+    return response
+
+@login_required
+def export_single_employee_csv(request, pk):
+    employee = get_object_or_404(Employee, pk=pk)
+    
+    response = HttpResponse(content_type='text/csv')
+    filename = f"employee_{employee.employee_code}.csv"
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+    writer = csv.writer(response)
+    writer.writerow([
+        'Employee Code', 
+        'Full Name', 
+        'Department', 
+        'Designation', 
+        'Joining Date', 
+        'Mobile',
+        'Address',
+        'Date of Birth',
+        'Aadhar Number',
+        'Sex',
+        'Nationality',
+        'State',
+        'Previous Experience',
+        'Employment Type',
+        'Basic Salary',
+        'PF Number',
+        'ESI Number'
+    ])
+
+    writer.writerow([
+        employee.employee_code,
+        employee.full_name,
+        employee.department.name if employee.department else 'N/A',
+        employee.designation.name if employee.designation else 'N/A',
+        employee.joining_date,
+        employee.contact_number,
+        employee.address,
+        employee.date_of_birth,
+        employee.aadhar_number,
+        employee.sex,
+        employee.nationality,
+        employee.state,
+        employee.previous_experience,
+        employee.employment_type,
+        employee.basic_salary,
+        employee.pf_number,
+        employee.esi_number,
+    ])
 
     return response
 

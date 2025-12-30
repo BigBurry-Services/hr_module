@@ -128,6 +128,7 @@
 </div>
 
 <div class="form-actions mt-3">
+    <a href="{% url 'export_single_employee_csv' employee.id %}" class="btn btn-secondary">Export to CSV</a>
     <a href="{% url 'employee_edit' employee.id %}" class="btn btn-primary">Edit Employee</a>
     <a href="{% url 'employee_list' %}" class="btn btn-secondary">Back to Employee List</a>
 </div>
