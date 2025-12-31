@@ -1017,7 +1017,42 @@ def summary(request):
         advances = SalaryAdvance.objects.filter(employee=employee, date__range=[start_date, end_date])
         total_advance = advances.aggregate(Sum('amount'))['amount__sum'] or Decimal('0.00')
 
-        total_deductions = pf + esi + total_advance
+        # Leave Cut Calculation (for display)
+        # We want to show FULL Basic in Earnings, and Leave Cut in Deductions.
+        # Logic: 
+        # Earned Basic = Actual Pay for time worked.
+        # Leave Cut = Full Basic - Earned Basic.
+        leave_cut_val = basic_salary - earned_basic
+        if leave_cut_val < 0: leave_cut_val = 0 # Should not happen unless extra pay?
+
+        # For Display on Slip:
+        # Gross Salary (Display) = Full Basic + Allowances + Overtime
+        # Total Deductions (Display) = PF + ESI + Advance + Leave Cut
+        # Net Pay = Gross (Display) - Total Deductions (Display)
+        
+        # Original Logic Result:
+        # Net Pay = (Earned Basic + Allowances + OT) - (PF + ESI + Advance)
+        
+        # Verify Math:
+        # Net Pay (Display) = (Full Basic + Allowances + OT) - (PF + ESI + Advance + (Full Basic - Earned Basic))
+        #                   = Full Basic + All + OT - PF - ESI - Adv - Full Basic + Earned Basic
+        #                   = Earned Basic + All + OT - PF - ESI - Adv
+        #                   = Original Net Pay
+        # So math holds.
+        
+        # We will use these new "Display" variables for the context passed to template/PDF.
+
+        display_gross_salary = basic_salary + total_allowances + overtime_amount
+        display_total_deductions = pf + esi + total_advance + leave_cut_val
+        
+        # Re-assign standard variables to use these display values where appropriate, 
+        # OR keep 'gross_salary' as 'Earned Gross' for other logic?
+        # The view passes 'gross_salary' and 'total_deductions' to template.
+        # User wants SLIP to show these. So we update them.
+        
+        gross_salary = display_gross_salary
+        total_deductions = display_total_deductions
+        
         salary_payable = gross_salary - total_deductions
         
         total_pf_contribution = pf + employer_pf
@@ -1049,7 +1084,8 @@ def summary(request):
         
         # Prepare Slip Data
         earnings_list_slip = []
-        earnings_list_slip.append({"name": "Basic Salary", "amount": earned_basic})
+        # CHANGED: Use Full Basic Salary
+        earnings_list_slip.append({"name": "Basic Salary", "amount": basic_salary})
         earnings_list_slip.append({"name": "Overtime Allowance", "amount": overtime_amount})
         
         for al in allowance_list:
@@ -1062,7 +1098,7 @@ def summary(request):
         if pf_eligible:
             deductions_list_slip.append({"name": "PF", "amount": pf})
         
-        leave_cut_val = basic_salary - earned_basic
+        # CHANGED: Always add Leave Cut if > 0
         if leave_cut_val > 0:
             deductions_list_slip.append({"name": "Leave Cut", "amount": leave_cut_val})
             
@@ -1202,7 +1238,8 @@ def summary(request):
             
             # Build Earnings List
             earnings_list = []
-            earnings_list.append(["Basic Salary (Earned)", f"{summary_data['earned_basic']:.2f}"])
+            # CHANGED: Use Full Basic
+            earnings_list.append(["Basic Salary", f"{summary_data['basic_salary']:.2f}"])
             earnings_list.append(["Overtime Amount", f"{summary_data['overtime_amount']:.2f}"])
             for al in summary_data['allowance_list']:
                 earnings_list.append([al['name'], f"{al['amount']:.2f}"])
