@@ -94,6 +94,28 @@ class DeviceSyncService:
                 check_in = None
                 check_out = None
                 
+                # Filter punches: Ignore duplicates within 5 minutes of the last valid punch
+                filtered_punches = []
+                last_valid_punch_time = None
+                
+                for punch in punches:
+                    current_time = punch['time']
+                    if last_valid_punch_time is None:
+                        filtered_punches.append(punch)
+                        last_valid_punch_time = current_time
+                    else:
+                        # Calculate difference in minutes
+                        reference_date = datetime.now().date() # Dummy date for time comparison
+                        t1 = datetime.combine(reference_date, last_valid_punch_time)
+                        t2 = datetime.combine(reference_date, current_time)
+                        diff_minutes = (t2 - t1).total_seconds() / 60
+                        
+                        if diff_minutes >= 5:
+                            filtered_punches.append(punch)
+                            last_valid_punch_time = current_time
+                
+                punches = filtered_punches
+                
                 # Logic: 
                 # 1. Try to assume Status 1 is Check-In, Status 15 is Check-Out
                 # 2. If timestamps are available but statuses are ambiguous, assume First is In, Last is Out
