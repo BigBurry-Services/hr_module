@@ -505,6 +505,7 @@ def attendance_mark(request):
                     date=selected_date,
                     defaults={
                         'check_in_time': time_value,
+                        'is_manual': True,
                         'notes': notes
                     }
                 )
@@ -521,6 +522,7 @@ def attendance_mark(request):
                     attendance = Attendance.objects.get(employee_id=emp_id, date=selected_date)
                     # Employee has checked in, update check_out_time
                     attendance.check_out_time = time_value
+                    attendance.is_manual = True
                     if notes:
                         attendance.notes = notes
                     attendance.save()
@@ -2356,6 +2358,7 @@ def monthly_salary_report(request):
 def toggle_no_break(request, pk):
     attendance = get_object_or_404(Attendance, pk=pk)
     attendance.no_break = not attendance.no_break
+    attendance.is_manual = True
     attendance.save()
     
     # Redirect back to previous page
@@ -2444,16 +2447,7 @@ def update_single_attendance(request, employee_id):
                     attendance.is_manual = True
                     attendance.save()
                     
-                # Sync back to device
-                try:
-                    DeviceSyncService().push_attendance_to_device(
-                        employee, 
-                        date_obj, 
-                        check_in=check_in, 
-                        check_out=check_out
-                    )
-                except Exception as e:
-                    print(f"Device Push Failed: {e}")
+                # No need to sync back to device as per requirement
 
                 messages.success(request, f"Updated Attendance for {employee.full_name}")
                 
