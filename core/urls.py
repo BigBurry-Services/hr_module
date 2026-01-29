@@ -38,6 +38,7 @@ urlpatterns = [
 
     # Attendance Management URLs
     path('attendance/mark/', views.attendance_mark, name='attendance_mark'),
+    path('attendance/update-single/<int:employee_id>/', views.update_single_attendance, name='update_single_attendance'),
     path('attendance/mark_leave/<int:employee_id>/', views.mark_single_leave, name='mark_single_leave'),
     path('attendance/<int:pk>/edit/', views.attendance_edit, name='attendance_edit'),
     path('attendance/<int:pk>/delete/', views.attendance_delete, name='attendance_delete'),
@@ -56,8 +57,8 @@ urlpatterns = [
     path('attendance/export/', views.export_attendance_csv, name='export_attendance_csv'),
 
     # Summary URL
-    # Summary URL
     path('summary/', views.summary, name='summary'),
+    path('attendance/toggle-lock/', views.toggle_attendance_lock, name='toggle_attendance_lock'),
     
     # Leaves & Reports
     path('leaves/calendar/', views.leave_calendar, name='leave_calendar'),

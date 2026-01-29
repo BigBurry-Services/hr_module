@@ -8,7 +8,7 @@ from django.contrib.auth.decorators import login_required
 import datetime
 import calendar
 import csv
-from .models import Employee, Attendance, Department, Designation, Allowance, EmployeeAllowance, HRProfile, Holiday, Leave, SalaryAdvance, AttendanceDevice, LeaveType
+from .models import Employee, Attendance, Department, Designation, Allowance, EmployeeAllowance, HRProfile, Holiday, Leave, SalaryAdvance, AttendanceDevice, LeaveType, AttendanceLock
 from django.contrib.auth.models import User
 from django.db import transaction
 from .forms import EmployeeForm, RegistrationForm, DepartmentForm, DesignationForm, AllowanceForm, EmployeeAllowanceForm, EmployeeAllowanceFormSet, AttendanceForm, HRProfileForm, HolidayForm, LeaveForm, SalaryAdvanceForm, AttendanceDeviceForm, LeaveTypeForm, SalarySummaryForm
@@ -438,13 +438,34 @@ def attendance_mark(request):
     
     # Filter variables
     selected_dept_id = request.GET.get('department')
-    selected_date_str = request.GET.get('date', datetime.date.today().strftime('%Y-%m-%d'))
     search_query = request.GET.get('search', '')
+    
+    today = datetime.date.today()
+    selected_year = int(request.GET.get('year', today.year))
+    selected_month = int(request.GET.get('month', today.month))
+    selected_date_str = request.GET.get('date')
 
-    try:
-        selected_date = datetime.datetime.strptime(selected_date_str, '%Y-%m-%d').date()
-    except ValueError:
-        selected_date = datetime.date.today()
+    if selected_date_str:
+        try:
+            # Handle flexible date strings (e.g., 2026-1-1 or 2026-01-01)
+            if '-' in selected_date_str:
+                parts = selected_date_str.split('-')
+                selected_date = datetime.date(int(parts[0]), int(parts[1]), int(parts[2]))
+            else:
+                selected_date = datetime.datetime.strptime(selected_date_str, '%Y-%m-%d').date()
+            # Ensure year/month consistency if date is passed
+            selected_year = selected_date.year
+            selected_month = selected_date.month
+        except (ValueError, IndexError):
+            selected_date = today
+            selected_date_str = selected_date.strftime('%Y-%m-%d')
+    else:
+        # Default to today if current month/year, else the 1st
+        if selected_year == today.year and selected_month == today.month:
+            selected_date = today
+        else:
+            selected_date = datetime.date(selected_year, selected_month, 1)
+        selected_date_str = selected_date.strftime('%Y-%m-%d')
 
     # Get Employees based on filter
     employees = Employee.objects.all()
@@ -525,6 +546,46 @@ def attendance_mark(request):
     # Get Leave Types
     leave_types = LeaveType.objects.all()
 
+    # Check if month is locked (Check if ANY employee is locked, or check specific logic)
+    # Check if month is locked (Check if ANY employee is locked, or check specific logic)
+    is_month_locked = AttendanceLock.objects.filter(
+        month=selected_month,
+        year=selected_year,
+        is_locked=True,
+        date__isnull=True
+    ).exists()
+
+    # Check if current day is locked
+    is_day_locked = AttendanceLock.objects.filter(
+        date=selected_date,
+        is_locked=True
+    ).exists()
+
+    # Check if ALL days of the month are locked to enable the "Lock Month" button
+    # Get number of days in selected month
+    num_days = calendar.monthrange(selected_year, selected_month)[1]
+    locked_days_count = AttendanceLock.objects.filter(
+        month=selected_month,
+        year=selected_year,
+        is_locked=True,
+        date__isnull=False
+    ).values('date').distinct().count()
+    
+    can_lock_month = (locked_days_count == num_days)
+
+    # Calendar Data
+    cal_weeks = calendar.monthcalendar(selected_year, selected_month)
+    holidays_this_month = Holiday.objects.filter(date__year=selected_year, date__month=selected_month)
+    holiday_days = [h.date.day for h in holidays_this_month]
+    
+    # Get day locks for the entire month for the calendar grid
+    month_day_locks = AttendanceLock.objects.filter(
+        month=selected_month,
+        year=selected_year,
+        is_locked=True,
+        date__isnull=False
+    ).values_list('date__day', flat=True).distinct()
+
     context = {
         'departments': departments,
         'employees': employees,
@@ -533,10 +594,22 @@ def attendance_mark(request):
         'leave_types': leave_types,
         'selected_dept_id': int(selected_dept_id) if selected_dept_id else None,
         'selected_date': selected_date_str,
+        'selected_day': selected_date.day,
+        'selected_month': selected_month,
+        'selected_year': selected_year,
+        'month_name': calendar.month_name[selected_month],
+        'calendar_weeks': cal_weeks,
+        'holiday_days': holiday_days,
         'search_query': search_query,
         'current_time': datetime.datetime.now().strftime('%H:%M'),
         'error_message': error_message,
         'success_message': success_message,
+        'is_month_locked': is_month_locked,
+        'is_day_locked': is_day_locked,
+        'can_lock_month': can_lock_month,
+        'month_day_locks': list(month_day_locks),
+        'years': range(today.year - 2, today.year + 2),
+        'months': list(enumerate(calendar.month_name))[1:]
     }
     return render(request, 'core/attendance_mark.html', context)
 
@@ -703,6 +776,7 @@ def summary(request):
         form = SalarySummaryForm()
         
     summary_data = None
+    is_month_locked = False
 
     # Helper to format seconds to HH:MM
     def format_seconds(seconds):
@@ -715,6 +789,15 @@ def summary(request):
         month = int(form.cleaned_data['month'])
         year = int(form.cleaned_data['year'])
         employee = form.cleaned_data['employee']
+
+        # Global lock status for the month - strictly month-level (no specific date)
+        is_month_locked = AttendanceLock.objects.filter(
+            month=month,
+            year=year,
+            is_locked=True,
+            date__isnull=True
+        ).exists()
+
         # Default action to generate if via GET
         action = request.POST.get('action', 'generate')
         
@@ -988,15 +1071,22 @@ def summary(request):
         pf_eligible = basic_salary <= 15000
         esi_eligible = basic_salary <= 21000
         
-        # PF: 12% of Earned Basic (which now includes OT? Standard is Basic+DA, excluding OT)
-        # But with this custom logic, EarnedBasic is everything.
-        # Let's assume PF applies to this new EarnedBasic.
-        if pf_eligible:
+        # CHECK FOR MANUAL PF
+        manual_pf = form.cleaned_data.get('manual_pf')
+        if manual_pf is not None:
+             pf = manual_pf
+             pf_eligible = True # Force eligible if manually entered
+        elif pf_eligible:
             pf = earned_basic * Decimal('0.12')
         else:
             pf = Decimal('0.00')
-            
-        if esi_eligible:
+
+        # CHECK FOR MANUAL ESI
+        manual_esi = form.cleaned_data.get('manual_esi')
+        if manual_esi is not None:
+             esi = manual_esi
+             esi_eligible = True # Force eligible if manually entered
+        elif esi_eligible:
              esi = gross_salary * Decimal('0.0075')
         else:
             esi = Decimal('0.00')
@@ -1383,11 +1473,140 @@ def summary(request):
             doc.build(elements)
             return response
 
+
     context = {
         'form': form,
         'summary_data': summary_data,
+        'is_month_locked': is_month_locked,
+        'selected_month': form.cleaned_data['month'] if form.is_valid() else None,
+        'selected_year': form.cleaned_data['year'] if form.is_valid() else None,
+        'selected_employee_id': employee.id if 'employee' in locals() and employee else None
     }
     return render(request, 'core/summary.html', context)
+
+@hr_required
+def toggle_attendance_lock(request):
+    """
+    Toggles the lock status for an employee (or all) for a specific month/year.
+    """
+    if request.method == 'POST':
+        employee_id = request.POST.get('employee_id')
+        month = request.POST.get('month')
+        year = request.POST.get('year')
+        date_str = request.POST.get('date')
+        
+        # Validate inputs
+        if (month and year) or date_str:
+            if date_str:
+                date_obj = datetime.datetime.strptime(date_str, '%Y-%m-%d').date()
+                month = date_obj.month
+                year = date_obj.year
+            else:
+                date_obj = None
+                month = int(month)
+                year = int(year)
+            
+            employees_to_lock = []
+            if employee_id:
+                employees_to_lock.append(get_object_or_404(Employee, pk=employee_id))
+            elif request.POST.get('lock_all') == 'true':
+                 # Requirement: month lock button enables when every day of that month is locked.
+                 # If it's a month lock (date_obj is None), double check if all days are locked for extra safety
+                 if not date_obj and 'unlock' not in request.POST:
+                     num_days = calendar.monthrange(year, month)[1]
+                     locked_days_count = AttendanceLock.objects.filter(
+                         month=month,
+                         year=year,
+                         is_locked=True,
+                         date__isnull=False
+                     ).values('date').distinct().count()
+                     
+                     if locked_days_count < num_days:
+                         messages.error(request, "Cannot lock month. All days must be locked first.")
+                         return redirect(request.POST.get('next') or 'summary')
+
+                 employees_to_lock = Employee.objects.all()
+            
+            for employee in employees_to_lock:
+                lock, created = AttendanceLock.objects.get_or_create(
+                    employee=employee,
+                    date=date_obj,
+                    month=month,
+                    year=year
+                )
+                
+                if 'unlock' in request.POST:
+                    password = request.POST.get('unlock_password')
+                    if password != '1234':
+                        messages.error(request, "Incorrect password. Unlocking denied.")
+                        if request.POST.get('next'):
+                             return redirect(request.POST.get('next'))
+                        return redirect('summary')
+                    
+                    lock.is_locked = False
+                    action_msg = "Unlocked"
+                else:
+                    lock.is_locked = True
+                    action_msg = "Locked"
+                lock.save()
+            
+            # --- Automated Month Lock/Unlock Logic ---
+            if date_obj: # Only trigger if we modified a day-level lock
+                if 'unlock' in request.POST:
+                    # If any day is unlocked, auto-unlock the month
+                    AttendanceLock.objects.filter(
+                        month=month,
+                        year=year,
+                        date__isnull=True
+                    ).update(is_locked=False)
+                    # Note: We don't show a separate message for this as it's a side effect.
+                else:
+                    # If locking a day, check if ALL days in month are now locked
+                    num_days = calendar.monthrange(year, month)[1]
+                    locked_days_count = AttendanceLock.objects.filter(
+                        month=month,
+                        year=year,
+                        is_locked=True,
+                        date__isnull=False
+                    ).values('date').distinct().count()
+                    
+                    if locked_days_count == num_days:
+                        # Auto-lock month for all employees
+                        for emp in Employee.objects.all():
+                            mlock, _ = AttendanceLock.objects.get_or_create(
+                                employee=emp,
+                                date=None,
+                                month=month,
+                                year=year
+                            )
+                            mlock.is_locked = True
+                            mlock.save()
+                        messages.info(request, f"Month {calendar.month_name[month]} {year} has been automatically finalized and locked.")
+            # ------------------------------------------
+
+            if employees_to_lock:
+                if len(employees_to_lock) > 1:
+                     msg = f"{action_msg} attendance for all employees ({month}/{year})"
+                else:
+                     msg = f"{action_msg} attendance for {employees_to_lock[0]} ({month}/{year})"
+                messages.success(request, msg)
+            else:
+                 messages.warning(request, "No employees selected to lock.")
+
+            # Redirect logic
+            if request.POST.get('next'):
+                 return redirect(request.POST.get('next'))
+            
+            # Default redirect to summary if not specified
+            base_url = reverse('summary')
+            if employee_id:
+                query_string = f"?employee={employee_id}&month={month}&year={year}"
+                return redirect(base_url + query_string)
+            return redirect(base_url)
+        
+    return redirect('summary')
+        
+    return redirect('summary')
 
 @login_required
 def export_employees_csv(request):
@@ -2116,10 +2335,18 @@ def monthly_salary_report(request):
         })
 
 
+    is_month_locked = AttendanceLock.objects.filter(
+        month=selected_month,
+        year=selected_year,
+        is_locked=True,
+        date__isnull=True
+    ).exists()
+
     context = {
         'report_data': report_data,
         'selected_month': selected_month,
         'selected_year': selected_year,
+        'is_month_locked': is_month_locked,
         'months': list(enumerate(calendar.month_name))[1:],
         'years': range(current_date.year - 2, current_date.year + 3)
     }
@@ -2136,3 +2363,112 @@ def toggle_no_break(request, pk):
     if next_url:
         return redirect(next_url)
     return redirect('summary')
+@hr_required
+def update_single_attendance(request, employee_id):
+    if request.method == 'POST':
+        try:
+            employee = get_object_or_404(Employee, pk=employee_id)
+            date_str = request.POST.get('date')
+            date_obj = datetime.datetime.strptime(date_str, '%Y-%m-%d').date()
+            
+            check_in = request.POST.get(f'check_in_{employee_id}')
+            check_out = request.POST.get(f'check_out_{employee_id}')
+            leave_type_id = request.POST.get(f'leave_type_{employee_id}')
+            
+            # Check for Lock
+            if AttendanceLock.objects.filter(
+                employee=employee, 
+                month=date_obj.month, 
+                year=date_obj.year, 
+                is_locked=True
+            ).exists():
+                messages.error(request, f"Attendance for {employee.full_name} is locked regarding {date_obj.strftime('%B %Y')}.")
+                # Redirect back to prevent processing
+                return redirect('attendance_mark')
+
+            # Priority: Leave Type > Attendance Times
+            # If Leave Type is selected, mark as leave and remove attendance
+            if leave_type_id:
+                 # Clear Attendance
+                 Attendance.objects.filter(employee=employee, date=date_obj).delete()
+                 
+                 # Create Leave
+                 # Clean up existing leaves first
+                 Leave.objects.filter(employee=employee, start_date__lte=date_obj, end_date__gte=date_obj).delete()
+                 
+                 leave_category = "Paid"
+                 reason = "Marked via Spreadsheet"
+                 if leave_type_id == 'unpaid':
+                     leave_category = "Unpaid"
+                     reason = "Unpaid Leave"
+                 else:
+                     try:
+                         lt = LeaveType.objects.get(pk=leave_type_id)
+                         reason = lt.name
+                     except LeaveType.DoesNotExist:
+                         pass
+                 
+                 Leave.objects.create(
+                    employee=employee,
+                    start_date=date_obj,
+                    end_date=date_obj,
+                    leave_type=leave_category,
+                    reason=reason,
+                    status='Approved'
+                 )
+                 messages.success(request, f"Marked Leave for {employee.full_name}")
+            
+            # Logic: If NO leave selected, check if we have times to update/create
+            elif check_in or check_out:
+                # Clear Leave if exists
+                Leave.objects.filter(employee=employee, start_date__lte=date_obj, end_date__gte=date_obj).delete()
+                
+                # Update/Create Attendance
+                defaults = {'is_manual': True}
+                if check_in: defaults['check_in_time'] = check_in
+                if check_out: defaults['check_out_time'] = check_out
+                
+                # If updating, we need to handle partial updates or full?
+                # update_or_create might not unset values if we pass None, but we are passing valid strings or empty strings?
+                # request.POST.get returns '' if empty usually.
+                
+                attendance, created = Attendance.objects.get_or_create(
+                    employee=employee,
+                    date=date_obj,
+                    defaults=defaults
+                )
+                
+                if not created:
+                    if check_in: attendance.check_in_time = check_in
+                    if check_out: attendance.check_out_time = check_out
+                    attendance.is_manual = True
+                    attendance.save()
+                    
+                # Sync back to device
+                try:
+                    DeviceSyncService().push_attendance_to_device(
+                        employee, 
+                        date_obj, 
+                        check_in=check_in, 
+                        check_out=check_out
+                    )
+                except Exception as e:
+                    print(f"Device Push Failed: {e}")
+
+                messages.success(request, f"Updated Attendance for {employee.full_name}")
+                
+            else:
+                 # Nothing provided? logic hole?
+                 # Maybe user cleared everything?
+                 pass
+
+        except Exception as e:
+            msg = f"Error updating: {e}"
+            if request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.GET.get('ajax'):
+                 return JsonResponse({'status': 'error', 'message': msg}, status=500)
+            messages.error(request, msg)
+            
+        if request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.GET.get('ajax'):
+             return JsonResponse({'status': 'success', 'message': 'Saved successfully'})
+        return redirect(f"{reverse('attendance_mark')}?date={date_str}")
+    return redirect('attendance_mark')

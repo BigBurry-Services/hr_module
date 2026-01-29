@@ -213,6 +213,9 @@ class SalarySummaryForm(forms.Form):
         self.fields['month'].initial = datetime.date.today().month
         self.fields['year'].initial = current_year
 
+    manual_pf = forms.DecimalField(max_digits=10, decimal_places=2, required=False, label="Manual PF Override")
+    manual_esi = forms.DecimalField(max_digits=10, decimal_places=2, required=False, label="Manual ESI Override")
+
 class HRProfileForm(forms.ModelForm):
     username = forms.CharField(max_length=150)
     password = forms.CharField(widget=forms.PasswordInput, required=False)

@@ -108,7 +108,30 @@ class Attendance(models.Model):
     check_in_time = models.TimeField()
     check_out_time = models.TimeField(blank=True, null=True)
     no_break = models.BooleanField(default=False)
+    is_manual = models.BooleanField(default=False)
     notes = models.TextField(blank=True, null=True)
+
+    @property
+    def working_hours(self):
+        if self.check_in_time and self.check_out_time:
+            # Combine with dummy date to perform subtraction
+            import datetime
+            dummy_date = datetime.date(2000, 1, 1)
+            start = datetime.datetime.combine(dummy_date, self.check_in_time)
+            end = datetime.datetime.combine(dummy_date, self.check_out_time)
+            if end < start:
+                # Handle overnight shift if necessary (assuming same day for now, or add day)
+                # But for simple time fields without dates, usually same day is assumed unless specified.
+                # If end < start, it might mean next day. Let's assume same day strict for now or negative.
+                # Actually, usually check-out is after check-in. If overnight, you'd need DateTimeField.
+                # Simple subtraction:
+                pass
+            diff = end - start
+            total_seconds = diff.total_seconds()
+            hours = int(total_seconds // 3600)
+            minutes = int((total_seconds % 3600) // 60)
+            return f"{hours}h {minutes}m"
+        return "-"
 
     def __str__(self):
         return f"{self.employee.full_name} - {self.date}"
@@ -159,6 +182,20 @@ class Leave(models.Model):
 
     def __str__(self):
         return f"{self.employee.full_name} - {self.leave_type} ({self.start_date} to {self.end_date})"
+
+class AttendanceLock(models.Model):
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
+    date = models.DateField(null=True, blank=True, help_text="Specific date for day-level lock. If null, it represents a month-level lock.")
+    month = models.IntegerField()
+    year = models.IntegerField()
+    is_locked = models.BooleanField(default=False)
+    locked_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('employee', 'date', 'month', 'year')
+
+    def __str__(self):
+        return f"Lock: {self.employee} - {self.month}/{self.year}"
 
 class SalaryAdvance(models.Model):
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE)

@@ -117,14 +117,41 @@
         {{ form.employee }}
     </div>
 
-    <div class="form-actions">
+    <!-- Manual Entry Section -->
+    <div class="row">
+        <div class="col-md-6 mb-3">
+            <label for="id_manual_pf" class="form-label">Manual PF Override</label>
+            {{ form.manual_pf }}
+            <div class="form-text">Leave blank to use auto-calculation</div>
+        </div>
+        <div class="col-md-6 mb-3">
+            <label for="id_manual_esi" class="form-label">Manual ESI Override</label>
+            {{ form.manual_esi }}
+            <div class="form-text">Leave blank to use auto-calculation</div>
+        </div>
+    </div>
+
+    <div class="form-actions" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
         {% if summary_data %}
         <button type="submit" name="action" value="generate" class="btn btn-primary no-print">Update View</button>
+
+        <!-- Lock/Unlock Logic -->
+        {% if is_month_locked %}
+        <span class="badge bg-success" style="font-size: 0.9rem; padding: 0.5rem;">
+            <i class="fas fa-lock"></i> Locked
+        </span>
+
+        <!-- Show Reports ONLY if Locked -->
         <button type="submit" name="action" value="download_pdf" class="btn btn-secondary no-print">Download
             PDF</button>
-
         <button type="button" onclick="window.print()" class="btn btn-secondary no-print"><i class="fas fa-print"></i>
-            Direct Print</button>
+            Print Slip</button>
+        {% else %}
+        <button type="button" class="btn btn-secondary no-print" disabled title="Lock attendance first">
+            <i class="fas fa-lock"></i> Locked Required to Print
+        </button>
+        {% endif %}
+        Direct Print</button>
         {% else %}
         <button type="submit" name="action" value="generate" class="btn btn-primary">Generate Summary</button>
         {% endif %}
@@ -133,6 +160,14 @@
 
 {% if summary_data %}
 <hr class="no-print">
+
+{% if not is_month_locked %}
+<div class="alert alert-warning mt-3">
+    <i class="fas fa-exclamation-triangle"></i> <strong>Month is Unlocked!</strong>
+    Please lock the attendance for this month in the <strong>Attendance Marking</strong> page before you can view
+    the salary summary or print the slip.
+</div>
+{% else %}
 <div class="card mt-3" id="salary-summary-card">
     <div class="card-header">
         <h2>Salary Summary for {{ summary_data.employee_name }} - {{ summary_data.month }}</h2>
@@ -351,72 +386,9 @@
         </tbody>
     </table>
 
-    <!-- Detailed Attendance Records -->
-    <h3 class="mt-4">Attendance Records</h3>
-    <div class="table-responsive w-100">
-        <table class="excel-table">
-            <thead>
-                <tr>
-                    <th style="width: 150px;">Date</th>
-                    <th>Status</th>
 
-                    <th>Check In</th>
-                    <th>Check Out</th>
-                    <th>Working Hours</th>
-                    <th>Overtime</th>
-                    <th>Notes</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for att in summary_data.attendance_list %}
-                <tr>
-                    <td class="date-col">{{ att.date }}</td>
-                    <td>
-                        <span class="badge bg-{{ att.status_color }}">{{ att.status }}</span>
-                    </td>
 
-                    <td>
-                        {% if att.check_in_alert %}
-                        <span style="color: red; font-weight: bold;">Not Done</span>
-                        {% else %}
-                        {{ att.check_in_time }}
-                        {% endif %}
-                    </td>
-                    <td>
-                        {% if att.check_out_alert %}
-                        <span style="color: red; font-weight: bold;">Not Done</span>
-                        {% else %}
-                        {{ att.check_out_time }}
-                        {% endif %}
-                    </td>
-                    <td {% if att.is_low_hours %}style="background-color: #fff3cd; color: #856404;" {% endif %}>
-                        {{ att.working_hours }}
-                        {% if att.id %}
-                        <br>
-                        <small>
-                            <a href="{% url 'toggle_no_break' att.id %}?next={{ request.get_full_path|urlencode }}"
-                                class="text-decoration-none">
-                                {% if att.no_break %}
-                                <span class="text-success">☑ No Break</span>
-                                {% else %}
-                                <span class="text-muted">☐ No Break</span>
-                                {% endif %}
-                            </a>
-                        </small>
-                        {% endif %}
-                    </td>
-                    <td>{{ att.overtime }}</td>
-                    <td>{{ att.notes }}</td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="6" class="text-center">No attendance records found for this period.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-
+    {% endif %}
 </div>
 </div>
 {% elif form.is_bound %}
@@ -424,7 +396,7 @@
 {% endif %}
 
 <!-- Custom Salary Slip (Visible only on Print) -->
-{% if summary_data %}
+{% if summary_data and is_month_locked %}
 <div id="custom-salary-slip" class="d-none">
     <div class="mb-3">
         <h2 style="font-family: serif; font-weight: 900; margin-bottom: 0;">CYAN INTERNATIONAL</h2>
@@ -537,7 +509,54 @@
 
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+</div>
+
+<!-- Unlock Password Modal -->
+<div class="modal fade" id="unlockSummaryModal" tabindex="-1" aria-labelledby="unlockSummaryModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="unlockSummaryModalLabel">Enter Password</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <input type="password" id="modal_unlock_password_summary" class="form-control" placeholder="Password"
+                    autofocus>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-warning" onclick="submitUnlockFormSummary()">Unlock</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
+    function submitUnlockFormSummary() {
+        const password = document.getElementById('modal_unlock_password_summary').value;
+        if (password) {
+            document.getElementById('unlock_password_input_summary').value = password;
+            document.getElementById('unlock-form-summary').submit();
+        } else {
+            alert("Please enter a password.");
+        }
+    }
+</script>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script>
+    function submitUnlockFormSummary() {
+        const password = document.getElementById('modal_unlock_password_summary').value;
+        if (password) {
+            document.getElementById('unlock_password_input_summary').value = password;
+            document.getElementById('unlock-form-summary').submit();
+        } else {
+            alert("Please enter a password.");
+        }
+    }
+
     $(document).ready(function () {
         // ... select2 init ...
         $('#id_employee').select2({
@@ -548,6 +567,7 @@
 
         // Add bootstrap form classes to selects if they don't have them
         $('select').addClass('form-select');
+        $('#id_manual_pf, #id_manual_esi').addClass('form-control');
 
         // Modal Preview Logic
         $('#salarySlipModal').appendTo("body"); // Move to body to prevent layout issues

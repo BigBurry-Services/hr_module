@@ -6,70 +6,346 @@
 
 {% block dashboard_content %}
 
-<div class="card" style="margin-bottom: 2rem;">
-    <form method="get" style="display: flex; gap: 1rem; align-items: flex-end;">
-        <div style="flex: 1;">
-            <label for="date">Date</label>
-            <input type="date" name="date" id="date" value="{{ selected_date }}" required>
-        </div>
-        <div style="flex: 1;">
-            <label for="department">Department</label>
-            <select name="department" id="department">
+<style>
+    .calendar-container {
+        background: #ffffff;
+        border-radius: 12px;
+        padding: 0.75rem 1rem;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+        margin-bottom: 1rem;
+        border: 1px solid #edf2f7;
+    }
+
+    .calendar-toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 1rem;
+        margin-bottom: 1.25rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid #f1f5f9;
+    }
+
+    .calendar-controls {
+        display: flex;
+        gap: 0.75rem;
+        align-items: center;
+    }
+
+    .calendar-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 4px;
+        max-width: 320px;
+    }
+
+    .calendar-header-day {
+        text-align: center;
+        font-weight: 700;
+        font-size: 0.7rem;
+        padding: 8px 0;
+        color: #94a3b8;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .calendar-day {
+        aspect-ratio: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.8rem;
+        font-weight: 600;
+        border: 1px solid transparent;
+        background: #f8fafc;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        position: relative;
+        padding: 0;
+    }
+
+    .calendar-day:hover:not(.empty) {
+        background-color: #f1f5f9;
+        border-color: #cbd5e1;
+        transform: translateY(-2px);
+    }
+
+    .calendar-day.empty {
+        cursor: default;
+        background: transparent;
+    }
+
+    .calendar-day.locked {
+        background-color: #e2e8f0;
+        color: #64748b;
+    }
+
+    .calendar-day.locked::after {
+        content: '\f023';
+        font-family: 'Font Awesome 5 Free';
+        font-weight: 900;
+        position: absolute;
+        top: 2px;
+        right: 4px;
+        font-size: 0.6rem;
+        opacity: 0.7;
+    }
+
+    .calendar-day.locked.active {
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        color: white;
+    }
+
+    .calendar-day.active {
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        color: white;
+        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+    }
+
+    .calendar-day.holiday {
+        background-color: #fef3c7;
+        color: #92400e;
+    }
+
+    .calendar-day.holiday.active {
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        color: white;
+    }
+
+    .calendar-day.today {
+        box-shadow: inset 0 0 0 2px #3b82f6;
+    }
+
+    .holiday-indicator {
+        width: 4px;
+        height: 4px;
+        background-color: currentColor;
+        border-radius: 50%;
+        margin-top: 2px;
+    }
+
+    .action-toolbar {
+        background: #ffffff;
+        border-radius: 12px;
+        padding: 1rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+        border: 1px solid #edf2f7;
+    }
+
+    .auto-save-notice {
+        font-size: 0.85rem;
+        font-style: italic;
+        color: #64748b;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .locked-row {
+        pointer-events: none;
+        opacity: 0.6;
+        background-color: #f1f5f9 !important;
+    }
+
+    .data-table {
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+
+    .data-table thead th {
+        background-color: #f8fafc;
+        color: #475569;
+        font-weight: 700;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 0.05em;
+        padding: 1rem;
+        border-bottom: 2px solid #e2e8f0;
+    }
+
+    .data-table tbody td {
+        padding: 0.75rem 1rem;
+        vertical-align: middle;
+        border-bottom: 1px solid #f1f5f9;
+        color: #1e293b;
+        font-size: 0.9rem;
+    }
+
+    .data-table tbody tr:hover {
+        background-color: #f8fafc !important;
+    }
+
+    .form-control-sm,
+    .form-select-sm {
+        border-radius: 6px;
+        border: 1px solid #e2e8f0;
+        padding: 0.4rem 0.6rem;
+        font-size: 0.85rem;
+    }
+
+    .form-control-sm:focus,
+    .form-select-sm:focus {
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+</style>
+
+<div class="calendar-container no-print">
+    <div class="calendar-toolbar">
+        <form id="filter-form" method="get" class="calendar-controls">
+            <select name="year" id="year" class="form-select form-select-sm" style="width: auto;">
+                {% for y in years %}
+                <option value="{{ y }}" {% if y|matches:selected_year %}selected{% endif %}>{{ y }}</option>
+                {% endfor %}
+            </select>
+            <select name="month" id="month" class="form-select form-select-sm" style="width: auto;">
+                {% for m_num, m_name in months %}
+                <option value="{{ m_num }}" {% if m_num|matches:selected_month %}selected{% endif %}>{{ m_name }}
+                </option>
+                {% endfor %}
+            </select>
+            <select name="department" id="department" class="form-select form-select-sm" style="width: auto;">
                 <option value="">All Departments</option>
                 {% for dept in departments %}
-                {# Uses custom filter to avoid formatter stripping spaces in equality check #}
                 <option value="{{ dept.id }}" {% if dept.id|matches:selected_dept_id %}selected{% endif %}>
                     {{ dept.name }}
                 </option>
                 {% endfor %}
             </select>
-        </div>
-        <div style="flex: 1;">
-            <label for="search">Search</label>
-            <input type="text" name="search" id="search" value="{{ search_query }}" placeholder="Name or Code">
-        </div>
-        <div style="display: flex; gap: 0.5rem;">
-            <button type="submit" class="btn btn-secondary">Filter</button>
+            <input type="text" name="search" id="search" value="{{ search_query }}" class="form-control form-control-sm"
+                placeholder="Search..." style="width: 150px;">
+            <input type="hidden" name="date" id="selected_date_input" value="{{ selected_date }}">
             <button type="submit" formaction="{% url 'export_attendance_csv' %}"
-                class="btn btn-outline-secondary">Export CSV</button>
+                class="btn btn-sm btn-outline-secondary">
+                <i class="fas fa-file-csv"></i> Export
+            </button>
+        </form>
+        <div class="calendar-title" style="font-weight: 700; color: #1e293b;">
+            {{ month_name }} {{ selected_year }}
         </div>
-    </form>
-    </form>
-    <div
-        style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #eee; display: flex; justify-content: flex-end; align-items: center; gap: 1rem;">
-        <span id="sync-status" style="font-size: 0.9rem; color: #666;"></span>
-        <button type="button" id="btn-sync-devices" class="btn btn-primary"
-            style="display: flex; align-items: center; gap: 0.5rem;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
-                class="bi bi-cloud-arrow-down-fill" viewBox="0 0 16 16">
-                <path
-                    d="M8 2a5.53 5.53 0 0 0-3.594 1.042.75.75 0 0 1 .233 1.31C5.992 4.018 7.197 4 8 4a2 2 0 0 1 2 2v4H6a.5.5 0 0 0 0 1h8z" />
-                <path
-                    d="M14.5 9.5a.5.5 0 0 0-.5.5v3 .5a.5.5 0 0 1-1 0v-4a.5.5 0 0 0-.5-.5h-2.17l-1.314-1.314A1.5 1.5 0 0 0 7.94 6.94l-1.314 1.314H4.5a.5.5 0 0 0-.5.5v4a.5.5 0 0 0 1 0v-3 .5a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 .5.5v3a.5.5 0 0 0 1 0v-3a.5.5 0 0 0-.5-.5z" />
-                <!-- Icon is illustrative -->
-                <path
-                    d="M8 0a5.53 5.53 0 0 0-3.594 1.042.75.75 0 0 1 .233 1.31C5.992 4.018 7.197 4 8 4a2 2 0 0 1 2 2v4H6a.5.5 0 0 0 0 1h8V6a5.53 5.53 0 0 0-2.406-4.648A.75.75 0 0 1 11.233 1.042 5.53 5.53 0 0 0 8 0m-2 5.5a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-2v4.5h2a.5.5 0 0 1 0 1h-5a.5.5 0 0 1 0-1h2V6h-2a.5.5 0 0 1-.5-.5" />
-                <path
-                    d="M13.405 11.793a.502.502 0 0 1 .716-.011A3.5 3.5 0 0 1 12.5 16h-9a3.5 3.5 0 0 1-1.621-6.603.5.5 0 0 1 .351.693 2.5 2.5 0 0 0 .77 4.41h9a2.5 2.5 0 0 0 1.405-4.707z" />
-                <path
-                    d="M8.5 6a.5.5 0 0 0-1 0v3.793L6.354 8.646a.5.5 0 1 0-.708.708l2 2a.5.5 0 0 0 .708 0l2-2a.5.5 0 0 0-.708-.708L8.5 9.793z" />
-            </svg>
-            Get Data from Devices
-        </button>
+    </div>
+
+    <div class="calendar-grid">
+        <div class="calendar-header-day">Mon</div>
+        <div class="calendar-header-day">Tue</div>
+        <div class="calendar-header-day">Wed</div>
+        <div class="calendar-header-day">Thu</div>
+        <div class="calendar-header-day">Fri</div>
+        <div class="calendar-header-day">Sat</div>
+        <div class="calendar-header-day">Sun</div>
+
+        {% for week in calendar_weeks %}
+        {% for day in week %}
+        {% if day|matches:0 %}
+        <div class="calendar-day empty"></div>
+        {% else %}
+        <div class="calendar-day {% if day|matches:selected_day %}active{% endif %} {% if day in holiday_days %}holiday{% endif %} {% if day in month_day_locks %}locked{% endif %}"
+            onclick="selectDate('{{ selected_year }}-{{ selected_month }}-{{ day }}')">
+            <span>{{ day }}</span>
+            {% if day in holiday_days %}
+            <div class="holiday-indicator"></div>
+            {% endif %}
+        </div>
+        {% endif %}
+        {% endfor %}
+        {% endfor %}
     </div>
 </div>
 
 <script>
-    document.getElementById('btn-sync-devices').addEventListener('click', function () {
-        const btn = this;
+    function selectDate(dateStr) {
+        document.getElementById('selected_date_input').value = dateStr;
+        document.getElementById('filter-form').submit();
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const form = document.getElementById('filter-form');
+        const selectors = form.querySelectorAll('select, input[type="text"]');
+        const dateInput = document.getElementById('selected_date_input');
+
+        selectors.forEach(input => {
+            input.addEventListener('change', function () {
+                // If year or month changes, clear the specific date to avoid overriding the selection
+                if (this.name === 'year' || this.name === 'month') {
+                    dateInput.value = '';
+                }
+                form.submit();
+            });
+        });
+    });
+</script>
+<div class="action-toolbar no-print">
+    <div class="auto-save-notice">
+        <i class="fas fa-magic text-primary"></i> Changes are saved automatically
+    </div>
+    <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <span id="sync-status" style="font-size: 0.85rem; font-weight: 500;"></span>
+
+        <!-- Day Lock Button -->
+        {% if is_day_locked %}
+        <form id="unlock-day-form" action="{% url 'toggle_attendance_lock' %}" method="post" style="display: inline;">
+            {% csrf_token %}
+            <input type="hidden" name="date" value="{{ selected_date }}">
+            <input type="hidden" name="lock_all" value="true">
+            <input type="hidden" name="next" value="{% url 'attendance_mark' %}?date={{ selected_date }}">
+            <input type="hidden" name="unlock" value="true">
+            <input type="hidden" name="unlock_password" id="unlock_password_input_day">
+            <button type="button" class="btn btn-outline-warning btn-sm" data-bs-toggle="modal"
+                data-bs-target="#unlockModal" onclick="window.unlockTargetForm = 'unlock-day-form';"
+                style="border-radius: 8px;">
+                <i class="fas fa-lock-open"></i> Unlock Day
+            </button>
+        </form>
+        {% else %}
+        <form action="{% url 'toggle_attendance_lock' %}" method="post" style="display: inline;">
+            {% csrf_token %}
+            <input type="hidden" name="date" value="{{ selected_date }}">
+            <input type="hidden" name="lock_all" value="true">
+            <input type="hidden" name="next" value="{% url 'attendance_mark' %}?date={{ selected_date }}">
+            <button type="submit" class="btn btn-info btn-sm text-white" title="Lock this day"
+                style="border-radius: 8px;">
+                <i class="fas fa-lock"></i> Lock Day
+            </button>
+        </form>
+        {% endif %}
+
+        <button type="button" id="btn-sync-devices" class="btn btn-primary btn-sm"
+            style="display: flex; align-items: center; gap: 0.5rem; border-radius: 8px;">
+            <i class="fas fa-sync-alt"></i> Sync
+        </button>
+
+        <!-- Month Lock Status Indicator -->
+        {% if is_month_locked %}
+        <span class="badge bg-success" style="font-size: 0.85rem; padding: 0.5rem 0.75rem; border-radius: 8px;">
+            <i class="fas fa-check-circle"></i> {{ month_name }} Locked
+        </span>
+        {% else %}
+        <span class="badge bg-secondary"
+            style="font-size: 0.85rem; padding: 0.5rem 0.75rem; border-radius: 8px; opacity: 0.8;">
+            <i class="fas fa-unlock"></i> {{ month_name }} Open
+        </span>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+    function syncDevices() {
+        const btn = document.getElementById('btn-sync-devices');
         const statusSpan = document.getElementById('sync-status');
         const originalText = btn.innerHTML;
-        const date = document.getElementById('date').value;
+        const dateInput = document.getElementById('date') || document.getElementById('selected_date_input');
+        const date = dateInput ? dateInput.value : '';
 
         btn.disabled = true;
-        btn.innerHTML = 'Fetching...';
-        statusSpan.innerText = 'Connecting to devices...';
-        statusSpan.style.color = '#666';
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Syncing...';
+        statusSpan.innerText = '';
 
         const formData = new FormData();
         formData.append('date', date);
@@ -85,17 +361,19 @@
                     statusSpan.innerText = data.message;
                     statusSpan.style.color = 'green';
                     setTimeout(() => {
-                        location.reload();
+                        const url = new URL(window.location.href);
+                        url.searchParams.set('synced', '1');
+                        window.location.href = url.toString();
                     }, 1500);
                 } else if (data.status === 'warning') {
                     statusSpan.innerText = data.message;
-                    // Assuming user might want to see details, alerting them for now or logging
                     alert(data.message + '\n' + data.details.errors.join('\n'));
                     btn.disabled = false;
                     btn.innerHTML = originalText;
-                    // maybe reload anyway to show partial data?
                     setTimeout(() => {
-                        location.reload();
+                        const url = new URL(window.location.href);
+                        url.searchParams.set('synced', '1');
+                        window.location.href = url.toString();
                     }, 2000);
                 } else {
                     statusSpan.innerText = 'Error: ' + data.message;
@@ -111,10 +389,18 @@
                 btn.disabled = false;
                 btn.innerHTML = originalText;
             });
+    }
+
+    document.getElementById('btn-sync-devices').addEventListener('click', syncDevices);
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (!urlParams.has('synced')) {
+            setTimeout(syncDevices, 500);
+        }
     });
 </script>
 
-<!-- Success/Error Messages -->
 {% if success_message %}
 <div class="alert alert-success" style="margin-bottom: 1rem;">
     {{ success_message }}
@@ -127,100 +413,193 @@
 </div>
 {% endif %}
 
-<form method="post" class="card">
+<form method="post" class="card {% if is_month_locked or is_day_locked %}locked-row{% endif %}"
+    style="border: none; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05); border-radius: 12px; overflow: hidden;">
     {% csrf_token %}
-    <input type="hidden" name="date" value="{{ selected_date }}">
+    <input type="hidden" name="date" id="date" value="{{ selected_date }}">
 
-    <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; align-items: flex-end;">
-        <div style="flex: 1; min-width: 150px;">
-            <label for="time">Time *</label>
-            <input type="time" name="time" id="time" value="{{ current_time }}" required>
-        </div>
-        <div style="flex: 2; min-width: 200px;">
-            <label for="notes">Notes</label>
-            <input type="text" name="notes" id="notes" placeholder="Optional notes">
-        </div>
-        <div style="display: flex; gap: 0.5rem;">
-            <button type="submit" name="action" value="check_in" class="btn btn-success">Check In Selected</button>
-            <button type="submit" name="action" value="check_out" class="btn btn-warning">Check Out Selected</button>
-        </div>
-    </div>
-
-    <table class="data-table">
+    <table class="data-table" style="margin: 0; width: 100%;">
         <thead>
             <tr>
-                <th style="width: 40px;"><input type="checkbox" id="select-all"></th>
-                <th>Employee Name</th>
+                <th style="width: 50px;">Sr No</th>
+                <th>Name</th>
                 <th>Department</th>
-                <th>Status ({{ selected_date }})</th>
-                <th>Actions</th>
+                <th style="width: 150px;">Entry Time</th>
+                <th style="width: 150px;">Exit Time</th>
+                <th style="width: 120px;">Working Hours</th>
+                <th style="width: 200px;">Leave Type</th>
+                <th style="width: 40px;"></th>
             </tr>
         </thead>
         <tbody>
             {% for employee in employees %}
-            {% with attendance=attendance_map|get_item:employee.id %}
-            {% with leave=leave_map|get_item:employee.id %}
-            <tr {% if attendance %}style="background-color: rgba(72, 187, 120, 0.1);" {% elif leave
-                %}style="background-color: rgba(237, 137, 54, 0.1);" {% endif %}>
-                <td>
-                    <input type="checkbox" name="employee_ids" value="{{ employee.id }}" class="emp-checkbox">
-                </td>
+            {% with attendance=attendance_map|get_item:employee.id leave=leave_map|get_item:employee.id %}
+            <tr class="{% if is_month_locked %}locked-row{% endif %}"
+                style="{% if attendance %}background-color: rgba(72, 187, 120, 0.1);{% elif leave %}background-color: rgba(237, 137, 54, 0.1);{% endif %}">
+                <td>{{ forloop.counter }}</td>
                 <td>{{ employee.full_name }}</td>
                 <td>{{ employee.department.name|default:"-" }}</td>
+
+                <!-- Entry Time -->
                 <td>
-                    {% if attendance %}
-                    {% if attendance.check_out_time %}
-                    <span class="badge"
-                        style="background-color: #48bb78; color: white; padding: 4px 8px; border-radius: 4px;">
-                        In: {{ attendance.check_in_time|time:"H:i" }} | Out: {{ attendance.check_out_time|time:"H:i" }}
-                    </span>
-                    {% else %}
-                    <span class="badge"
-                        style="background-color: #ed8936; color: white; padding: 4px 8px; border-radius: 4px;">
-                        In: {{ attendance.check_in_time|time:"H:i" }} (Not checked out)
-                    </span>
-                    {% endif %}
-                    {% elif leave %}
-                    <span class="badge"
-                        style="background-color: #e53e3e; color: white; padding: 4px 8px; border-radius: 4px;">
-                        On Leave ({{ leave.leave_type }})
-                    </span>
-                    {% else %}
-                    <span class="text-secondary">-</span>
-                    {% endif %}
+                    <input type="time" name="check_in_{{ employee.id }}"
+                        value="{% if attendance and attendance.check_in_time %}{{ attendance.check_in_time|time:'H:i' }}{% endif %}"
+                        class="form-control form-control-sm auto-save-input" data-emp-id="{{ employee.id }}">
                 </td>
+
+                <!-- Exit Time -->
                 <td>
-                    <div style="display: flex; gap: 0.5rem; align-items: center;">
-                        <select name="leave_type_{{ employee.id }}" class="form-select form-select-sm"
-                            style="width: auto; padding: 0.25rem 2rem 0.25rem 0.5rem; font-size: 0.8rem;">
-                            <option value="">-- Type --</option>
-                            <option value="unpaid">Unpaid Leave</option>
-                            {% for lt in leave_types %}
-                            <option value="{{ lt.id }}">{{ lt.name }}</option>
-                            {% endfor %}
-                        </select>
-                        <button type="submit" formaction="{% url 'mark_single_leave' employee.id %}" formnovalidate
-                            class="btn btn-warning btn-sm" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;">
-                            Mark
-                        </button>
-                    </div>
+                    <input type="time" name="check_out_{{ employee.id }}"
+                        value="{% if attendance and attendance.check_out_time %}{{ attendance.check_out_time|time:'H:i' }}{% endif %}"
+                        class="form-control form-control-sm auto-save-input" data-emp-id="{{ employee.id }}">
+                </td>
+
+                <!-- Working Hours -->
+                <td>
+                    {% if attendance and attendance.working_hours %}{{ attendance.working_hours }}{% else %}-{% endif %}
+                </td>
+
+                <!-- Leave Type -->
+                <td>
+                    <select name="leave_type_{{ employee.id }}" class="form-select form-select-sm auto-save-input"
+                        data-emp-id="{{ employee.id }}">
+                        <option value="">-- None --</option>
+                        {% if leave %}
+                        <option value="unpaid" {% if leave.leave_type|matches:'Unpaid' %}selected{% endif %}>Unpaid
+                            Leave</option>
+                        {% for lt in leave_types %}
+                        <option value="{{ lt.id }}" {% if leave.reason|startswith:lt.name %}selected{% endif %}>{{
+                            lt.name }}</option>
+                        {% endfor %}
+                        {% else %}
+                        <option value="unpaid">Unpaid Leave</option>
+                        {% for lt in leave_types %}
+                        <option value="{{ lt.id }}">{{ lt.name }}</option>
+                        {% endfor %}
+                        {% endif %}
+                    </select>
+                </td>
+
+                <td style="width: 40px; text-align: center;">
+                    <span id="status-icon-{{ employee.id }}"></span>
                 </td>
             </tr>
             {% endwith %}
-            {% endwith %}
             {% empty %}
             <tr>
-                <td colspan="4">No employees found.</td>
+                <td colspan="8">No employees found.</td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
 </form>
 
+<div id="toast-container" style="position: fixed; bottom: 20px; right: 20px; z-index: 1050;"></div>
+
+<!-- Unlock Password Modal -->
+<div class="modal fade" id="unlockModal" tabindex="-1" aria-labelledby="unlockModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="unlockModalLabel">Enter Password</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <input type="password" id="modal_unlock_password" class="form-control" placeholder="Password" autofocus>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-warning" onclick="submitUnlockForm()">Unlock</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
-    document.getElementById('select-all').addEventListener('change', function () {
-        const checkboxes = document.querySelectorAll('.emp-checkbox');
-        checkboxes.forEach(cb => cb.checked = this.checked);
+    function submitUnlockForm() {
+        const password = document.getElementById('modal_unlock_password').value;
+        if (password) {
+            const formId = window.unlockTargetForm || 'unlock-form-mark';
+            const form = document.getElementById(formId);
+            const passwordInput = form.querySelector('input[name="unlock_password"]');
+            if (passwordInput) {
+                passwordInput.value = password;
+            }
+            form.submit();
+        } else {
+            alert("Please enter a password.");
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        // ... previous JS ...
+        const inputs = document.querySelectorAll('.auto-save-input');
+        inputs.forEach(input => {
+            input.addEventListener('change', function () {
+                saveRow(this.dataset.empId);
+            });
+        });
     });
+
+    function saveRow(employeeId) {
+        // Double check if locked in JS to prevent async issues
+        if (document.querySelector('.locked-row')) {
+            // Actually, if the class is on the row, interaction is already blocked by CSS
+        }
+
+        const date = document.getElementById('date').value;
+        const checkIn = document.querySelector(`input[name="check_in_${employeeId}"]`).value;
+        const checkOut = document.querySelector(`input[name="check_out_${employeeId}"]`).value;
+        const leaveType = document.querySelector(`select[name="leave_type_${employeeId}"]`).value;
+        const statusIcon = document.getElementById(`status-icon-${employeeId}`);
+
+        statusIcon.innerHTML = '<div class="spinner-border spinner-border-sm text-primary" role="status"></div>';
+
+        const formData = new FormData();
+        formData.append('date', date);
+        formData.append(`check_in_${employeeId}`, checkIn);
+        formData.append(`check_out_${employeeId}`, checkOut);
+        formData.append(`leave_type_${employeeId}`, leaveType);
+        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+        const url = `/attendance/update-single/${employeeId}/`;
+
+        fetch(url, {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    statusIcon.innerHTML = '<i class="fas fa-check text-success"></i>';
+                    showToast("Saved successfully", "success");
+                    setTimeout(() => { statusIcon.innerHTML = ''; }, 2000);
+                } else {
+                    statusIcon.innerHTML = '<i class="fas fa-exclamation-circle text-danger"></i>';
+                    showToast(data.message || "Error saving", "danger");
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                statusIcon.innerHTML = '<i class="fas fa-times text-danger"></i>';
+                showToast("Network error", "danger");
+            });
+    }
+
+    function showToast(message, type) {
+        const container = document.getElementById('toast-container');
+        const toast = document.createElement('div');
+        toast.className = `toast align-items-center text-white bg-${type} border-0 show`;
+        toast.role = 'alert';
+        toast.innerHTML = `
+            <div class="d-flex">
+                <div class="toast-body">${message}</div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>
+        `;
+        container.appendChild(toast);
+        setTimeout(() => { toast.remove(); }, 3000);
+    }
 </script>
 {% endblock %}

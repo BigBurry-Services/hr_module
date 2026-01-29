@@ -42,6 +42,13 @@
         </form>
     </div>
     <div class="card-body p-0">
+        {% if not is_month_locked %}
+        <div class="alert alert-warning m-4">
+            <i class="fas fa-exclamation-triangle"></i> <strong>Month is Unlocked!</strong>
+            The monthly salary report is only available after you have locked the attendance for this month in the
+            <strong>Attendance Marking</strong> page. This ensures all attendance data is verified and finalized.
+        </div>
+        {% else %}
         <style>
             .spreadsheet-container {
                 max-height: 80vh;
@@ -196,6 +203,7 @@
                 </tbody>
             </table>
         </div>
+        {% endif %}
     </div>
 </div>
 {% endblock %}
