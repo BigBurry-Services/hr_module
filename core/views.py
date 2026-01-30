@@ -1529,28 +1529,42 @@ def toggle_attendance_lock(request):
 
                  employees_to_lock = Employee.objects.all()
             
+            # Optimized Bulk Locking/Unlocking
+            target_status = 'unlock' not in request.POST
+            action_msg = "Unlocked" if not target_status else "Locked"
+
+            if 'unlock' in request.POST:
+                password = request.POST.get('unlock_password')
+                if password != '1234':
+                    messages.error(request, "Incorrect password. Unlocking denied.")
+                    if request.POST.get('next'):
+                         return redirect(request.POST.get('next'))
+                    return redirect('summary')
+
+            # 1. Update existing locks
+            existing_locks = AttendanceLock.objects.filter(
+                employee__in=employees_to_lock,
+                date=date_obj,
+                month=month,
+                year=year
+            )
+            existing_employee_ids = set(existing_locks.values_list('employee_id', flat=True))
+            existing_locks.update(is_locked=target_status)
+
+            # 2. Create missing locks
+            new_locks = []
             for employee in employees_to_lock:
-                lock, created = AttendanceLock.objects.get_or_create(
-                    employee=employee,
-                    date=date_obj,
-                    month=month,
-                    year=year
-                )
-                
-                if 'unlock' in request.POST:
-                    password = request.POST.get('unlock_password')
-                    if password != '1234':
-                        messages.error(request, "Incorrect password. Unlocking denied.")
-                        if request.POST.get('next'):
-                             return redirect(request.POST.get('next'))
-                        return redirect('summary')
-                    
-                    lock.is_locked = False
-                    action_msg = "Unlocked"
-                else:
-                    lock.is_locked = True
-                    action_msg = "Locked"
-                lock.save()
+                if employee.id not in existing_employee_ids:
+                    new_locks.append(AttendanceLock(
+                        employee=employee,
+                        date=date_obj,
+                        month=month,
+                        year=year,
+                        is_locked=target_status
+                    ))
+            
+            if new_locks:
+                AttendanceLock.objects.bulk_create(new_locks)
             
             # --- Automated Month Lock/Unlock Logic ---
             if date_obj: # Only trigger if we modified a day-level lock

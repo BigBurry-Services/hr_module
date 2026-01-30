@@ -111,6 +111,9 @@ class Attendance(models.Model):
     is_manual = models.BooleanField(default=False)
     notes = models.TextField(blank=True, null=True)
 
+    class Meta:
+        unique_together = ('employee', 'date')
+
     @property
     def working_hours(self):
         if self.check_in_time and self.check_out_time:
