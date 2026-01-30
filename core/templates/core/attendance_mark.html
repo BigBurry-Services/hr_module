@@ -360,20 +360,18 @@
                 if (data.status === 'success') {
                     statusSpan.innerText = data.message;
                     statusSpan.style.color = 'green';
+                    sessionStorage.setItem('has_synced_attendance', 'true');
                     setTimeout(() => {
-                        const url = new URL(window.location.href);
-                        url.searchParams.set('synced', '1');
-                        window.location.href = url.toString();
+                        window.location.reload();
                     }, 1500);
                 } else if (data.status === 'warning') {
                     statusSpan.innerText = data.message;
                     alert(data.message + '\n' + data.details.errors.join('\n'));
                     btn.disabled = false;
                     btn.innerHTML = originalText;
+                    sessionStorage.setItem('has_synced_attendance', 'true');
                     setTimeout(() => {
-                        const url = new URL(window.location.href);
-                        url.searchParams.set('synced', '1');
-                        window.location.href = url.toString();
+                        window.location.reload();
                     }, 2000);
                 } else {
                     statusSpan.innerText = 'Error: ' + data.message;
@@ -394,8 +392,7 @@
     document.getElementById('btn-sync-devices').addEventListener('click', syncDevices);
 
     document.addEventListener('DOMContentLoaded', function () {
-        const urlParams = new URLSearchParams(window.location.search);
-        if (!urlParams.has('synced')) {
+        if (!sessionStorage.getItem('has_synced_attendance')) {
             setTimeout(syncDevices, 500);
         }
     });
