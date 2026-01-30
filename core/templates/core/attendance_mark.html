@@ -43,7 +43,7 @@
     .calendar-header-day {
         text-align: center;
         font-weight: 700;
-        font-size: 0.7rem;
+        font-size: 0.85rem;
         padding: 8px 0;
         color: #94a3b8;
         text-transform: uppercase;
@@ -58,7 +58,7 @@
         justify-content: center;
         border-radius: 6px;
         cursor: pointer;
-        font-size: 0.8rem;
+        font-size: 0.95rem;
         font-weight: 600;
         border: 1px solid transparent;
         background: #f8fafc;
@@ -140,7 +140,7 @@
     }
 
     .auto-save-notice {
-        font-size: 0.85rem;
+        font-size: 1rem;
         font-style: italic;
         color: #64748b;
         display: flex;
@@ -164,7 +164,7 @@
         color: #475569;
         font-weight: 700;
         text-transform: uppercase;
-        font-size: 0.75rem;
+        font-size: 0.9rem;
         letter-spacing: 0.05em;
         padding: 1rem;
         border-bottom: 2px solid #e2e8f0;
@@ -175,7 +175,7 @@
         vertical-align: middle;
         border-bottom: 1px solid #f1f5f9;
         color: #1e293b;
-        font-size: 0.9rem;
+        font-size: 1.05rem;
     }
 
     .data-table tbody tr:hover {
@@ -186,8 +186,13 @@
     .form-select-sm {
         border-radius: 6px;
         border: 1px solid #e2e8f0;
-        padding: 0.4rem 0.6rem;
-        font-size: 0.85rem;
+        padding: 0.5rem 0.75rem;
+        font-size: 1rem;
+    }
+
+    .form-select-sm {
+        padding-right: 2.5rem !important;
+        /* Ensure space for dropdown arrow */
     }
 
     .form-control-sm:focus,
@@ -219,11 +224,16 @@
                 </option>
                 {% endfor %}
             </select>
-            <input type="text" name="search" id="search" value="{{ search_query }}" class="form-control form-control-sm"
-                placeholder="Search..." style="width: 150px;">
+            <div class="input-group" style="width: auto;">
+                <input type="text" name="search" id="search" value="{{ search_query }}" class="form-control"
+                    placeholder="Search..." style="width: 300px; padding: 0.6rem 1rem; font-size: 1.05rem;">
+                <button type="submit" class="btn btn-primary" style="padding-left: 1.25rem; padding-right: 1.25rem;">
+                    <i class="fas fa-search"></i>
+                </button>
+            </div>
             <input type="hidden" name="date" id="selected_date_input" value="{{ selected_date }}">
-            <button type="submit" formaction="{% url 'export_attendance_csv' %}"
-                class="btn btn-sm btn-outline-secondary">
+            <button type="submit" formaction="{% url 'export_attendance_csv' %}" class="btn btn-success"
+                style="font-size: 1rem; padding: 0.6rem 1.25rem;">
                 <i class="fas fa-file-csv"></i> Export
             </button>
         </form>
@@ -267,7 +277,7 @@
 
     document.addEventListener('DOMContentLoaded', function () {
         const form = document.getElementById('filter-form');
-        const selectors = form.querySelectorAll('select, input[type="text"]');
+        const selectors = form.querySelectorAll('select');
         const dateInput = document.getElementById('selected_date_input');
 
         selectors.forEach(input => {
@@ -286,7 +296,7 @@
         <i class="fas fa-magic text-primary"></i> Changes are saved automatically
     </div>
     <div style="display: flex; align-items: center; gap: 0.75rem;">
-        <span id="sync-status" style="font-size: 0.85rem; font-weight: 500;"></span>
+        <span id="sync-status" style="font-size: 1rem; font-weight: 500;"></span>
 
         <!-- Day Lock Button -->
         {% if is_day_locked %}
@@ -323,12 +333,12 @@
 
         <!-- Month Lock Status Indicator -->
         {% if is_month_locked %}
-        <span class="badge bg-success" style="font-size: 0.85rem; padding: 0.5rem 0.75rem; border-radius: 8px;">
+        <span class="badge bg-success" style="font-size: 1rem; padding: 0.5rem 0.75rem; border-radius: 8px;">
             <i class="fas fa-check-circle"></i> {{ month_name }} Locked
         </span>
         {% else %}
         <span class="badge bg-secondary"
-            style="font-size: 0.85rem; padding: 0.5rem 0.75rem; border-radius: 8px; opacity: 0.8;">
+            style="font-size: 1rem; padding: 0.5rem 0.75rem; border-radius: 8px; opacity: 0.8;">
             <i class="fas fa-unlock"></i> {{ month_name }} Open
         </span>
         {% endif %}
