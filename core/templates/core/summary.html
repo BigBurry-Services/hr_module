@@ -345,7 +345,6 @@
         <h3>Net Salary Payable: <span class="fw-bold">{{ summary_data.salary_payable|floatformat:2 }}</span></h3>
     </div>
 
-    <!-- Attendance Summary -->
     <h3 class="mt-4">Attendance Summary</h3>
     <table class="excel-table">
         <thead>
@@ -383,6 +382,48 @@
                 <td><strong>Total Minutes Worked</strong></td>
                 <td>{{ summary_data.total_minutes_worked }}</td>
             </tr>
+        </tbody>
+    </table>
+
+    <h3 class="mt-4">Daily Attendance Log</h3>
+    <table class="excel-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Day</th>
+                <th>Check In</th>
+                <th>Check Out</th>
+                <th>Working Hours</th>
+                <th>Overtime</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in summary_data.attendance_list %}
+            <tr>
+                <td class="date-col">{{ row.date|date:"d-M-Y" }}</td>
+                <td>{{ row.date|date:"l" }}</td>
+                <td>
+                    {% if row.check_in_time and row.check_in_time != "Not Done" %}
+                    {{ row.check_in_time|time:"H:i" }}
+                    {% else %}
+                    {{ row.check_in_time }}
+                    {% endif %}
+                </td>
+                <td>
+                    {% if row.check_out_time and row.check_out_time != "Not Done" %}
+                    {{ row.check_out_time|time:"H:i" }}
+                    {% else %}
+                    {{ row.check_out_time }}
+                    {% endif %}
+                </td>
+                <td>{{ row.working_hours }}</td>
+                <td>{{ row.overtime }}</td>
+                <td>
+                    <span class="badge bg-{{ row.status_color }}">{{ row.status }}</span>
+                </td>
+            </tr>
+            {% endfor %}
         </tbody>
     </table>
 
