@@ -208,3 +208,27 @@ class SalaryAdvance(models.Model):
 
     def __str__(self):
         return f"{self.employee.full_name} - {self.amount} on {self.date}"
+
+class SalaryPayment(models.Model):
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
+    month = models.IntegerField()
+    year = models.IntegerField()
+    payment_date = models.DateField(auto_now_add=True)
+    is_paid = models.BooleanField(default=True)
+    amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    
+    # Snapshot fields to persist values upon locking
+    gross_salary = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    net_salary = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    pf_deduction = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    esi_deduction = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    employer_pf = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    employer_esi = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    leave_deduction = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    salary_advance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    class Meta:
+        unique_together = ('employee', 'month', 'year')
+
+    def __str__(self):
+        return f"Payment: {self.employee} - {self.month}/{self.year}"

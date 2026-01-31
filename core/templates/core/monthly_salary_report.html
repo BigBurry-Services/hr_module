@@ -61,7 +61,7 @@
                 margin-bottom: 0;
             }
 
-            .spreadsheet-table th {
+            .spreadsheet-table thead th {
                 position: sticky;
                 top: 0;
                 background-color: #f8f9fa;
@@ -156,7 +156,7 @@
                     <tr>
                         <th>Code</th>
                         <th>Name</th>
-                        <th>DOJ</th>
+
                         <th>Basic</th>
                         <th>Allowances</th>
                         <th>Wrk Hrs</th>
@@ -177,7 +177,7 @@
                     <tr>
                         <td>{{ row.code }}</td>
                         <td>{{ row.name }}</td>
-                        <td>{{ row.doj|date:"d-M-Y" }}</td>
+
                         <td class="num-cell">{{ row.basic }}</td>
                         <td class="num-cell">{{ row.allowances }}</td>
                         <td class="num-cell">{{ row.working_hours }}</td>
@@ -201,6 +201,24 @@
                     </tr>
                     {% endfor %}
                 </tbody>
+                <tfoot class="table-dark">
+                    <tr>
+                        <th colspan="2" class="text-end">TOTAL</th>
+                        <th class="text-end">{{ totals.basic }}</th>
+                        <th class="text-end">{{ totals.allowances }}</th>
+                        <th></th>
+                        <th></th>
+                        <th class="text-end">{{ totals.overtime_amount }}</th>
+                        <th class="text-end">{{ totals.salary_advance }}</th>
+                        <th class="text-end">{{ totals.esic }}</th>
+                        <th class="text-end">{{ totals.pf }}</th>
+                        <th></th>
+                        <th class="text-end">{{ totals.leave_cut_amount }}</th>
+                        <th class="text-end">{{ totals.total_salary }}</th>
+                        <th class="text-end">{{ totals.net_salary }}</th>
+                        <th></th>
+                    </tr>
+                </tfoot>
             </table>
         </div>
         {% endif %}

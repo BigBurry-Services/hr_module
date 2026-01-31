@@ -101,338 +101,415 @@
     </li>
 </ul>
 
-<form method="post" class="card">
-
+<form method="post" id="summary-form">
     {% csrf_token %}
-    <div class="mb-3">
-        <label for="id_month" class="form-label">Month</label>
-        {{ form.month }}
-    </div>
-    <div class="mb-3">
-        <label for="id_year" class="form-label">Year</label>
-        {{ form.year }}
-    </div>
-    <div class="mb-3">
-        <label for="id_employee" class="form-label">Select Employee</label>
-        {{ form.employee }}
-    </div>
-
-    <!-- Manual Entry Section -->
-    <div class="row">
-        <div class="col-md-6 mb-3">
-            <label for="id_manual_pf" class="form-label">Manual PF Override</label>
-            {{ form.manual_pf }}
-            <div class="form-text">Leave blank to use auto-calculation</div>
+    <input type="hidden" name="unlock_password" id="unlock_password_input_summary">
+    <input type="hidden" name="action" id="form_action_input" value="generate">
+    <div class="card mb-4 no-print">
+        <div class="card-header">
+            <h5 class="mb-0">Generate Summary</h5>
         </div>
-        <div class="col-md-6 mb-3">
-            <label for="id_manual_esi" class="form-label">Manual ESI Override</label>
-            {{ form.manual_esi }}
-            <div class="form-text">Leave blank to use auto-calculation</div>
-        </div>
-    </div>
-
-    <div class="form-actions" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
-        {% if summary_data %}
-        <button type="submit" name="action" value="generate" class="btn btn-primary no-print">Update View</button>
-
-        <!-- Lock/Unlock Logic -->
-        {% if is_month_locked %}
-        <span class="badge bg-success" style="font-size: 0.9rem; padding: 0.5rem;">
-            <i class="fas fa-lock"></i> Locked
-        </span>
-
-        <!-- Show Reports ONLY if Locked -->
-        <button type="submit" name="action" value="download_pdf" class="btn btn-secondary no-print">Download
-            PDF</button>
-        <button type="button" onclick="window.print()" class="btn btn-secondary no-print"><i class="fas fa-print"></i>
-            Print Slip</button>
-        {% else %}
-        <button type="button" class="btn btn-secondary no-print" disabled title="Lock attendance first">
-            <i class="fas fa-lock"></i> Locked Required to Print
-        </button>
-        {% endif %}
-        Direct Print</button>
-        {% else %}
-        <button type="submit" name="action" value="generate" class="btn btn-primary">Generate Summary</button>
-        {% endif %}
-    </div>
-</form>
-
-{% if summary_data %}
-<hr class="no-print">
-
-{% if not is_month_locked %}
-<div class="alert alert-warning mt-3">
-    <i class="fas fa-exclamation-triangle"></i> <strong>Month is Unlocked!</strong>
-    Please lock the attendance for this month in the <strong>Attendance Marking</strong> page before you can view
-    the salary summary or print the slip.
-</div>
-{% else %}
-<div class="card mt-3" id="salary-summary-card">
-    <div class="card-header">
-        <h2>Salary Summary for {{ summary_data.employee_name }} - {{ summary_data.month }}</h2>
-    </div>
-    <div class="card-body">
-        <!-- Employee Details Table (Spreadsheet Style) -->
-        <table class="excel-table mb-4">
-            <tbody>
-                <tr>
-                    <td><strong>Name</strong></td>
-                    <td>{{ summary_data.employee_name }}</td>
-                    <td><strong>Employee Code</strong></td>
-                    <td>{{ summary_data.employee_code }}</td>
-                </tr>
-                <tr>
-                    <td><strong>Designation</strong></td>
-                    <td>{{ summary_data.designation }}</td>
-                    <td><strong>Date of Joining</strong></td>
-                    <td>{{ summary_data.joining_date|date:"d-M-Y" }}</td>
-                </tr>
-                <tr>
-                    <td><strong>PF Number</strong></td>
-                    <td>{{ summary_data.pf_number|default:"-" }}</td>
-                    <td><strong>ESI Number</strong></td>
-                    <td>{{ summary_data.esi_number|default:"-" }}</td>
-                </tr>
-            </tbody>
-        </table>
-
-        <div class="row">
-            <!-- Earnings -->
-            <div class="col-md-6">
-                <div class="card mb-3">
-                    <div class="card-header bg-success text-white">
-                        <h4 class="mb-0 text-white">Earnings</h4>
-                    </div>
-                    <table class="excel-table">
-                        <tbody>
-                            <tr>
-                                <td>Basic Salary (Earned)</td>
-                                <td class="text-end">{{ summary_data.earned_basic|floatformat:2 }}</td>
-                            </tr>
-
-                            {% for allowance in summary_data.allowance_list %}
-                            <tr>
-                                <td>{{ allowance.name }}</td>
-                                <td class="text-end">{{ allowance.amount }}</td>
-                            </tr>
-                            {% endfor %}
-                            <tr>
-                                <td>Overtime Amount</td>
-                                <td class="text-end">{{ summary_data.overtime_amount|floatformat:2 }}</td>
-                            </tr>
-                            <tr style="background-color: #d1e7dd; font-weight: bold;">
-                                <td>Gross Salary</td>
-                                <td class="text-end">{{ summary_data.gross_salary|floatformat:2 }}</td>
-                            </tr>
-                        </tbody>
-                    </table>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="id_month" class="form-label">Month</label>
+                    {{ form.month }}
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="id_year" class="form-label">Year</label>
+                    {{ form.year }}
                 </div>
             </div>
+            <div class="mb-3 mt-2">
+                <label for="id_employee" class="form-label">Select Employee</label>
+                {{ form.employee }}
+            </div>
 
-            <!-- Deductions -->
-            <div class="col-md-6">
+            <!-- Manual Entry Section REMOVED - Moved to Results Table -->
+
+            <div class="form-actions mt-4" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                {% if summary_data %}
+                <button type="submit" name="action" value="generate" class="btn btn-primary no-print">Update
+                    View</button>
+
+                <!-- Lock/Unlock Logic -->
+                {% if is_month_locked %}
+                <span class="badge bg-success" style="font-size: 0.9rem; padding: 0.5rem;">
+                    <i class="fas fa-lock"></i> Locked
+                </span>
+
+                <!-- Show Reports ONLY if Locked -->
+                <button type="submit" name="action" value="download_pdf" class="btn btn-secondary no-print">Download
+                    PDF</button>
+                <button type="button" onclick="window.print()" class="btn btn-secondary no-print"><i
+                        class="fas fa-print"></i>
+                    Print Slip</button>
+                {% else %}
+                <button type="button" class="btn btn-secondary no-print" disabled title="Lock attendance first">
+                    <i class="fas fa-lock"></i> Locked Required to Print
+                </button>
+                {% endif %}
+                <!-- Removed loose 'Direct Print' text/button if it was broken -->
+                {% else %}
+                <button type="submit" name="action" value="generate" class="btn btn-primary">Generate Summary</button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+
+    {% if summary_data %}
+    <hr class="no-print">
+
+    {% if not is_month_locked %}
+    <div class="alert alert-warning mt-3">
+        <i class="fas fa-exclamation-triangle"></i> <strong>Month is Unlocked!</strong>
+        Please lock the attendance for this month in the <strong>Attendance Marking</strong> page before you can view
+        the salary summary or print the slip.
+    </div>
+    {% else %}
+    <div class="card mt-3" id="salary-summary-card">
+        <div class="card-header">
+            <h2>Salary Summary for {{ summary_data.employee_name }} - {{ summary_data.month }}</h2>
+        </div>
+        <div class="card-body">
+            <!-- Employee Details Table (Spreadsheet Style) -->
+            <table class="excel-table mb-4">
+                <tbody>
+                    <tr>
+                        <td><strong>Name</strong></td>
+                        <td>{{ summary_data.employee_name }}</td>
+                        <td><strong>Employee Code</strong></td>
+                        <td>{{ summary_data.employee_code }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Designation</strong></td>
+                        <td>{{ summary_data.designation }}</td>
+                        <td><strong>Date of Joining</strong></td>
+                        <td>{{ summary_data.joining_date|date:"d-M-Y" }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>PF Number</strong></td>
+                        <td>{{ summary_data.pf_number|default:"-" }}</td>
+                        <td><strong>ESI Number</strong></td>
+                        <td>{{ summary_data.esi_number|default:"-" }}</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="row">
+                <!-- Earnings -->
+                <div class="col-md-6">
+                    <div class="card mb-3">
+                        <div class="card-header bg-success text-white">
+                            <h4 class="mb-0 text-white">Earnings</h4>
+                        </div>
+                        <table class="excel-table">
+                            <tbody>
+                                <tr>
+                                    <td>Basic Salary (Earned)</td>
+                                    <td class="text-end">{{ summary_data.earned_basic|floatformat:2 }}</td>
+                                </tr>
+
+                                {% for allowance in summary_data.allowance_list %}
+                                <tr>
+                                    <td>{{ allowance.name }}</td>
+                                    <td class="text-end">{{ allowance.amount }}</td>
+                                </tr>
+                                {% endfor %}
+                                <tr>
+                                    <td>Overtime Amount</td>
+                                    <td class="text-end">{{ summary_data.overtime_amount|floatformat:2 }}</td>
+                                </tr>
+                                <tr style="background-color: #d1e7dd; font-weight: bold;">
+                                    <td>Gross Salary</td>
+                                    <td class="text-end" id="td_gross_salary">
+                                        {{ summary_data.gross_salary|floatformat:2 }}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Deductions -->
+                <div class="col-md-6">
+                    <div class="card mb-3">
+                        <div class="card-header bg-danger text-white">
+                            <h4 class="mb-0 text-white">Deductions</h4>
+                        </div>
+                        <table class="excel-table">
+                            <tbody>
+                                <tr>
+                                    <td>Provident Fund (PF)</td>
+                                    <td class="text-end">
+                                        {% if summary_data.pf_eligible %}
+                                        <div class="input-group input-group-sm">
+                                            <input type="number" step="0.01" name="manual_pf" id="input_manual_pf"
+                                                class="form-control" value="{{ form.manual_pf.value|default:'' }}"
+                                                placeholder="{{ summary_data.pf|floatformat:2 }}"
+                                                data-calc="{{ summary_data.pf }}" {{ disabled_status }}>
+                                        </div>
+                                        {% else %}
+                                        <div class="input-group input-group-sm">
+                                            <span class="badge bg-secondary me-2">Not Eligible</span>
+                                            <input type="number" step="0.01" name="manual_pf" id="input_manual_pf"
+                                                class="form-control" value="{{ form.manual_pf.value|default:'' }}"
+                                                placeholder="0.00" data-calc="0.00" {{ disabled_status }}>
+                                        </div>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>ESI</td>
+                                    <td class="text-end">
+                                        {% if summary_data.esi_eligible %}
+                                        <div class="input-group input-group-sm">
+                                            <input type="number" step="0.01" name="manual_esi" id="input_manual_esi"
+                                                class="form-control" value="{{ form.manual_esi.value|default:'' }}"
+                                                placeholder="{{ summary_data.esi|floatformat:2 }}"
+                                                data-calc="{{ summary_data.esi }}" {{ disabled_status }}>
+                                        </div>
+                                        {% else %}
+                                        <div class="input-group input-group-sm">
+                                            <span class="badge bg-secondary me-2">Not Eligible</span>
+                                            <input type="number" step="0.01" name="manual_esi" id="input_manual_esi"
+                                                class="form-control" value="{{ form.manual_esi.value|default:'' }}"
+                                                placeholder="0.00" data-calc="0.00" {{ disabled_status }}>
+                                        </div>
+                                        {{ 0|floatformat:2 }}
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>Salary Advance</td>
+                                    <td class="text-end" id="td_salary_advance">
+                                        {{ summary_data.salary_advance|floatformat:2 }}
+                                    </td>
+                                </tr>
+                                <tr style="background-color: #f8d7da; font-weight: bold;">
+                                    <td>Total Deductions</td>
+                                    <td class="text-end" id="td_total_deductions"
+                                        data-leave-cut="{{ summary_data.leave_cut_amount|default:0 }}">{{
+                                        summary_data.total_deductions|floatformat:2 }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-3">
+            <div class="col-md-12">
                 <div class="card mb-3">
-                    <div class="card-header bg-danger text-white">
-                        <h4 class="mb-0 text-white">Deductions</h4>
+                    <div class="card-header text-white" style="background-color: #6c757d;">
+                        <h4 class="mb-0 text-white">Government / Company Contributions</h4>
                     </div>
                     <table class="excel-table">
+                        <thead>
+                            <tr>
+                                <th>Contribution Type</th>
+                                <th>Employee Share (Deducted)</th>
+                                <th>Employer Share (Company Cost)</th>
+                                <th>Total</th>
+                            </tr>
+                        </thead>
                         <tbody>
                             <tr>
                                 <td>Provident Fund (PF)</td>
                                 <td class="text-end">
-                                    {% if summary_data.pf_eligible %}
-                                    {{ summary_data.pf|floatformat:2 }}
-                                    {% else %}
-                                    <span class="badge bg-secondary">Not Eligible</span>
-                                    {{ 0|floatformat:2 }}
+                                    <span id="td_pf_emp_share_gov">
+                                        {% if summary_data.pf_eligible %}
+                                        {{ summary_data.pf|floatformat:2 }}
+                                        {% else %}
+                                        0.00
+                                        {% endif %}
+                                    </span>
+                                    {% if not summary_data.pf_eligible %}
+                                    <span class="badge bg-secondary ms-1">Not Eligible</span>
                                     {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    <span id="td_pf_employer_share_gov" data-amount="{{ summary_data.employer_pf }}">
+                                        {% if summary_data.pf_eligible %}
+                                        {{ summary_data.employer_pf | floatformat:2 }}
+                                        {% else %}
+                                        0.00
+                                        {% endif %}
+                                    </span>
+                                    {% if not summary_data.pf_eligible %}
+                                    <span class="badge bg-secondary ms-1">Not Eligible</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end"><strong id="td_pf_total_gov">{{
+                                        summary_data.total_pf_contribution|floatformat:2
+                                        }}</strong>
                                 </td>
                             </tr>
                             <tr>
                                 <td>ESI</td>
                                 <td class="text-end">
-                                    {% if summary_data.esi_eligible %}
-                                    {{ summary_data.esi|floatformat:2 }}
-                                    {% else %}
-                                    <span class="badge bg-secondary">Not Eligible</span>
-                                    {{ 0|floatformat:2 }}
+                                    <span id="td_esi_emp_share_gov">
+                                        {% if summary_data.esi_eligible %}
+                                        {{ summary_data.esi|floatformat:2 }}
+                                        {% else %}
+                                        0.00
+                                        {% endif %}
+                                    </span>
+                                    {% if not summary_data.esi_eligible %}
+                                    <span class="badge bg-secondary ms-1">Not Eligible</span>
                                     {% endif %}
                                 </td>
+                                <td class="text-end">
+                                    <span id="td_esi_employer_share_gov" data-amount="{{ summary_data.employer_esi }}">
+                                        {% if summary_data.esi_eligible %}
+                                        {{ summary_data.employer_esi|floatformat:2 }}
+                                        {% else %}
+                                        0.00
+                                        {% endif %}
+                                    </span>
+                                    {% if not summary_data.esi_eligible %}
+                                    <span class="badge bg-secondary ms-1">Not Eligible</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end"><strong id="td_esi_total_gov">{{
+                                        summary_data.total_esi_contribution|floatformat:2}}</strong>
+                                </td>
                             </tr>
-                            <tr>
-                                <td>Salary Advance</td>
-                                <td class="text-end">{{ summary_data.salary_advance|floatformat:2 }}</td>
-                            </tr>
-                            <tr style="background-color: #f8d7da; font-weight: bold;">
-                                <td>Total Deductions</td>
-                                <td class="text-end">{{ summary_data.total_deductions|floatformat:2 }}</td>
+                            <tr style="background-color: #d1e7dd; font-weight: bold;">
+                                <td>Total Payable to Govt</td>
+                                <td class="text-end" id="td_total_emp_share_gov">{{
+                                    summary_data.total_emp_share|floatformat:2 }}</td>
+                                <td class="text-end" id="td_total_employer_share_gov">{{
+                                    summary_data.total_employer_share|floatformat:2 }}</td>
+                                <td class="text-end" id="td_grand_total_gov">{{
+                                    summary_data.grand_total_gov_payable|floatformat:2 }}</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
             </div>
         </div>
-    </div>
-
-    <div class="row mt-3">
-        <div class="col-md-12">
-            <div class="card mb-3">
-                <div class="card-header text-white" style="background-color: #6c757d;">
-                    <h4 class="mb-0 text-white">Government / Company Contributions</h4>
-                </div>
-                <table class="excel-table">
-                    <thead>
-                        <tr>
-                            <th>Contribution Type</th>
-                            <th>Employee Share (Deducted)</th>
-                            <th>Employer Share (Company Cost)</th>
-                            <th>Total</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>Provident Fund (PF)</td>
-                            <td class="text-end">
-                                {% if summary_data.pf_eligible %}
-                                {{ summary_data.pf|floatformat:2 }}
-                                {% else %}
-                                <span class="badge bg-secondary">Not Eligible</span>
-                                {% endif %}
-                            </td>
-                            <td class="text-end">
-                                {% if summary_data.pf_eligible %}
-                                {{ summary_data.employer_pf | floatformat:2 }}
-                                {% else %}
-                                <span class="badge bg-secondary">Not Eligible</span>
-                                {% endif %}
-                            </td>
-                            <td class="text-end"><strong>{{ summary_data.total_pf_contribution|floatformat:2 }}</strong>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>ESI</td>
-                            <td class="text-end">
-                                {% if summary_data.esi_eligible %}
-                                {{ summary_data.esi|floatformat:2 }}
-                                {% else %}
-                                <span class="badge bg-secondary">Not Eligible</span>
-                                {% endif %}
-                            </td>
-                            <td class="text-end">
-                                {% if summary_data.esi_eligible %}
-                                {{ summary_data.employer_esi|floatformat:2 }}
-                                {% else %}
-                                <span class="badge bg-secondary">Not Eligible</span>
-                                {% endif %}
-                            </td>
-                            <td class="text-end"><strong>{{ summary_data.total_esi_contribution|floatformat:2}}</strong>
-                            </td>
-                        </tr>
-                        <tr style="background-color: #d1e7dd; font-weight: bold;">
-                            <td>Total Payable to Govt</td>
-                            <td class="text-end">{{ summary_data.total_emp_share|floatformat:2 }}</td>
-                            <td class="text-end">{{ summary_data.total_employer_share|floatformat:2 }}</td>
-                            <td class="text-end">{{ summary_data.grand_total_gov_payable|floatformat:2 }}</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
+        <!-- Net Salary -->
+        <div class="alert alert-primary mt-3 text-center">
+            <h3>Net Salary Payable: <span class="fw-bold" id="span_net_salary">{{
+                    summary_data.salary_payable|floatformat:2 }}</span></h3>
         </div>
+
+        <!-- Payment Actions -->
+        <div class="d-flex justify-content-center mt-4 gap-2">
+            {% if is_salary_paid %}
+            <div
+                class="alert alert-success fw-bold w-100 text-center d-flex justify-content-between align-items-center">
+                <span><i class="fas fa-check-circle me-2"></i> SALARY PAID & LOCKED</span>
+                <button type="button" class="btn btn-warning btn-sm" data-bs-toggle="modal"
+                    data-bs-target="#unlockSummaryModal">
+                    <i class="fas fa-lock-open me-1"></i> Unlock
+                </button>
+            </div>
+            {% else %}
+            <button type="submit" name="action" value="mark_paid" class="btn btn-success btn-lg"
+                onclick="return confirm('Are you sure you want to finalize and lock this salary? This action cannot be undone.');">
+                <i class="fas fa-check me-2"></i> Mark as Paid
+            </button>
+            <button type="submit" name="action" value="generate" class="btn btn-primary btn-lg">
+                <i class="fas fa-sync-alt me-2"></i> Update / Recalculate
+            </button>
+            {% endif %}
+        </div>
+
+        <h3 class="mt-4">Attendance Summary</h3>
+        <table class="excel-table">
+            <thead>
+                <tr>
+                    <th>Metric</th>
+                    <th>Value</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Daily Wage</strong></td>
+                    <td>{{ summary_data.daily_wage|floatformat:2 }}</td>
+                </tr>
+                <tr>
+                    <td><strong>Per Minute Wage</strong></td>
+                    <td>{{ summary_data.per_minute_wage|floatformat:2 }}</td>
+                </tr>
+                <tr>
+                    <td><strong>Total Unpaid Leaves</strong></td>
+                    <td>{{ summary_data.total_unpaid_leaves }}</td>
+                </tr>
+                <tr>
+                    <td><strong>Total Working Hours</strong></td>
+                    <td>{{ summary_data.total_working_hours }}</td>
+                </tr>
+                <tr>
+                    <td><strong>Total Overtime Hours</strong></td>
+                    <td>{{ summary_data.total_overtime_hours }}</td>
+                </tr>
+                <tr>
+                    <td><strong>Total Hours (Reg + OT)</strong></td>
+                    <td>{{ summary_data.total_gross_hours }}</td>
+                </tr>
+                <tr>
+                    <td><strong>Total Minutes Worked</strong></td>
+                    <td>{{ summary_data.total_minutes_worked }}</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3 class="mt-4">Daily Attendance Log</h3>
+        <table class="excel-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Day</th>
+                    <th>Check In</th>
+                    <th>Check Out</th>
+                    <th>Working Hours</th>
+                    <th>Overtime</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in summary_data.attendance_list %}
+                <tr>
+                    <td class="date-col">{{ row.date|date:"d-M-Y" }}</td>
+                    <td>{{ row.date|date:"l" }}</td>
+                    <td>
+                        {% if row.check_in_time and row.check_in_time != "Not Done" %}
+                        {{ row.check_in_time|time:"H:i" }}
+                        {% else %}
+                        {{ row.check_in_time }}
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if row.check_out_time and row.check_out_time != "Not Done" %}
+                        {{ row.check_out_time|time:"H:i" }}
+                        {% else %}
+                        {{ row.check_out_time }}
+                        {% endif %}
+                    </td>
+                    <td>{{ row.working_hours }}</td>
+                    <td>{{ row.overtime }}</td>
+                    <td>
+                        <span class="badge bg-{{ row.status_color }}">{{ row.status }}</span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+
+
+        {% endif %}
     </div>
-    <!-- Net Salary -->
-    <div class="alert alert-primary mt-3 text-center">
-        <h3>Net Salary Payable: <span class="fw-bold">{{ summary_data.salary_payable|floatformat:2 }}</span></h3>
     </div>
-
-    <h3 class="mt-4">Attendance Summary</h3>
-    <table class="excel-table">
-        <thead>
-            <tr>
-                <th>Metric</th>
-                <th>Value</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr>
-                <td><strong>Daily Wage</strong></td>
-                <td>{{ summary_data.daily_wage|floatformat:2 }}</td>
-            </tr>
-            <tr>
-                <td><strong>Per Minute Wage</strong></td>
-                <td>{{ summary_data.per_minute_wage|floatformat:2 }}</td>
-            </tr>
-            <tr>
-                <td><strong>Total Unpaid Leaves</strong></td>
-                <td>{{ summary_data.total_unpaid_leaves }}</td>
-            </tr>
-            <tr>
-                <td><strong>Total Working Hours</strong></td>
-                <td>{{ summary_data.total_working_hours }}</td>
-            </tr>
-            <tr>
-                <td><strong>Total Overtime Hours</strong></td>
-                <td>{{ summary_data.total_overtime_hours }}</td>
-            </tr>
-            <tr>
-                <td><strong>Total Hours (Reg + OT)</strong></td>
-                <td>{{ summary_data.total_gross_hours }}</td>
-            </tr>
-            <tr>
-                <td><strong>Total Minutes Worked</strong></td>
-                <td>{{ summary_data.total_minutes_worked }}</td>
-            </tr>
-        </tbody>
-    </table>
-
-    <h3 class="mt-4">Daily Attendance Log</h3>
-    <table class="excel-table">
-        <thead>
-            <tr>
-                <th>Date</th>
-                <th>Day</th>
-                <th>Check In</th>
-                <th>Check Out</th>
-                <th>Working Hours</th>
-                <th>Overtime</th>
-                <th>Status</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for row in summary_data.attendance_list %}
-            <tr>
-                <td class="date-col">{{ row.date|date:"d-M-Y" }}</td>
-                <td>{{ row.date|date:"l" }}</td>
-                <td>
-                    {% if row.check_in_time and row.check_in_time != "Not Done" %}
-                    {{ row.check_in_time|time:"H:i" }}
-                    {% else %}
-                    {{ row.check_in_time }}
-                    {% endif %}
-                </td>
-                <td>
-                    {% if row.check_out_time and row.check_out_time != "Not Done" %}
-                    {{ row.check_out_time|time:"H:i" }}
-                    {% else %}
-                    {{ row.check_out_time }}
-                    {% endif %}
-                </td>
-                <td>{{ row.working_hours }}</td>
-                <td>{{ row.overtime }}</td>
-                <td>
-                    <span class="badge bg-{{ row.status_color }}">{{ row.status }}</span>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-
-
-
-    {% endif %}
-</div>
+</form>
 </div>
 {% elif form.is_bound %}
+
 <p class="text-info mt-3">No attendance data found for the selected criteria.</p>
 {% endif %}
 
@@ -442,7 +519,8 @@
     <div class="mb-3">
         <h2 style="font-family: serif; font-weight: 900; margin-bottom: 0;">CYAN INTERNATIONAL</h2>
         <div style="font-style: italic; font-weight: 600;">Manufacturers and Exporters of Food Products</div>
-        <div style="font-size: 14px;">IX/403. ARAKKUNNAM P.O. ERNAKULAM. KERALA. INDIA 682313 . Mob +91 7593881754</div>
+        <div style="font-size: 14px;">IX/403. ARAKKUNNAM P.O. ERNAKULAM. KERALA. INDIA 682313 . Mob +91 7593881754
+        </div>
         <div class="text-center fw-bold text-uppercase border-top border-dark mt-1 pt-1">
             MONTHLY SALARY SLIP {{ summary_data.month|upper }}
         </div>
@@ -578,21 +656,9 @@
         const password = document.getElementById('modal_unlock_password_summary').value;
         if (password) {
             document.getElementById('unlock_password_input_summary').value = password;
-            document.getElementById('unlock-form-summary').submit();
-        } else {
-            alert("Please enter a password.");
-        }
-    }
-</script>
-
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-<script>
-    function submitUnlockFormSummary() {
-        const password = document.getElementById('modal_unlock_password_summary').value;
-        if (password) {
-            document.getElementById('unlock_password_input_summary').value = password;
-            document.getElementById('unlock-form-summary').submit();
+            // Set action to unlock
+            document.getElementById('form_action_input').value = 'unlock';
+            document.getElementById('summary-form').submit();
         } else {
             alert("Please enter a password.");
         }
@@ -618,7 +684,10 @@
             $('#salary-slip-preview-body').html(slipContent);
         });
     });
+
 </script>
+
+
 
 <script>
     document.addEventListener("DOMContentLoaded", function () {
@@ -626,6 +695,111 @@
         if (urlParams.get('print_now') === 'true') {
             window.print();
         }
+
+        // Real-Time Calculation Logic
+        const inputPF = document.getElementById('input_manual_pf');
+        const inputESI = document.getElementById('input_manual_esi');
+
+        function getFloat(id, attr = null) {
+            const el = document.getElementById(id);
+            if (!el) return 0.0;
+            let val = 0.0;
+            if (attr) {
+                val = parseFloat(el.getAttribute(attr));
+            } else {
+                val = parseFloat(el.innerText.replace(/,/g, ''));
+            }
+            return isNaN(val) ? 0.0 : val;
+        }
+
+        function getInputValue(input) {
+            if (!input) return 0.0;
+            let val = parseFloat(input.value);
+            if (isNaN(val)) {
+                // Fallback to calculated default
+                val = parseFloat(input.getAttribute('data-calc'));
+            }
+            return isNaN(val) ? 0.0 : val;
+        }
+
+        function updateCalculations() {
+            // 1. Get Values (Manual Input or Default Calculated)
+            const pf = getInputValue(inputPF);
+            const esi = getInputValue(inputESI);
+
+            // Removing redundant second argument to rely on innerText fallback
+            const grossSalary = getFloat('td_gross_salary');
+            const salaryAdvance = getFloat('td_salary_advance');
+            const leaveCut = getFloat('td_total_deductions', 'data-leave-cut'); // Base deduction part
+
+            // 2. Calculate Employer Shares (Dynamic Logic)
+            // PF: 1:1 Ratio (Employer matches Employee)
+            const employerPF = pf;
+
+            // ESI: Ratio based on 3.25% / 0.75% = 4.3333...
+            const employerESI = esi * (3.25 / 0.75);
+
+            // 3. Calculate Totals
+            const totalDeductions = pf + esi + salaryAdvance + leaveCut;
+            const netSalary = grossSalary - totalDeductions;
+
+            const pfTotalGov = pf + employerPF;
+            const esiTotalGov = esi + employerESI;
+
+            const totalEmpShare = pf + esi;
+            const totalEmployerShare = employerPF + employerESI;
+            const grandTotalGov = totalEmpShare + totalEmployerShare;
+
+            // 4. Update DOM
+            // Format helper
+            const fmt = (n) => n.toFixed(2);
+
+            // Deductions Table
+            const elTotalDeductions = document.getElementById('td_total_deductions');
+            if (elTotalDeductions) elTotalDeductions.innerText = fmt(totalDeductions);
+
+            // Net Salary
+            const elNetSalary = document.getElementById('span_net_salary');
+            if (elNetSalary) elNetSalary.innerText = fmt(netSalary);
+
+            // Gov Contribution Table - Employee Share
+            const elPFEmpGov = document.getElementById('td_pf_emp_share_gov');
+            if (elPFEmpGov) elPFEmpGov.innerText = fmt(pf);
+
+            const elESIEmpGov = document.getElementById('td_esi_emp_share_gov');
+            if (elESIEmpGov) elESIEmpGov.innerText = fmt(esi);
+
+            // Gov Contribution Table - Employer Share (NEW UPDATES)
+            const elPFEmployerGov = document.getElementById('td_pf_employer_share_gov');
+            if (elPFEmployerGov) elPFEmployerGov.innerText = fmt(employerPF);
+
+            const elESIEmployerGov = document.getElementById('td_esi_employer_share_gov');
+            if (elESIEmployerGov) elESIEmployerGov.innerText = fmt(employerESI);
+
+            // Gov Contribution Table - Totals
+            const elPFTotalGov = document.getElementById('td_pf_total_gov');
+            if (elPFTotalGov) elPFTotalGov.innerText = fmt(pfTotalGov);
+
+            const elESITotalGov = document.getElementById('td_esi_total_gov');
+            if (elESITotalGov) elESITotalGov.innerText = fmt(esiTotalGov);
+
+            const elTotalEmpShareGov = document.getElementById('td_total_emp_share_gov');
+            if (elTotalEmpShareGov) elTotalEmpShareGov.innerText = fmt(totalEmpShare);
+
+            const elTotalEmployerShareGov = document.getElementById('td_total_employer_share_gov');
+            if (elTotalEmployerShareGov) elTotalEmployerShareGov.innerText = fmt(totalEmployerShare);
+
+            const elGrandTotalGov = document.getElementById('td_grand_total_gov');
+            if (elGrandTotalGov) elGrandTotalGov.innerText = fmt(grandTotalGov);
+        }
+
+        // Bind Events
+        if (inputPF) inputPF.addEventListener('input', updateCalculations);
+        if (inputESI) inputESI.addEventListener('input', updateCalculations);
+
+        // Initial calculation on load
+        console.log("Summary Page JS Loaded - Split Logic Active (v2)");
+        updateCalculations();
     });
 </script>
 {% endblock %}

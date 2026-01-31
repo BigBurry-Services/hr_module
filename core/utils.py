@@ -30,6 +30,8 @@ class DeviceSyncService:
 
         results = {
             'processed_count': 0,
+            'created_count': 0,
+            'updated_count': 0,
             'errors': [],
             'devices_connected': 0
         }
@@ -177,6 +179,10 @@ class DeviceSyncService:
                         'notes': 'Synced via Device'
                     }
                 )
+                if created:
+                    results['created_count'] += 1
+                else:
+                    results['updated_count'] += 1
                 count += 1
 
             except Exception as e:
