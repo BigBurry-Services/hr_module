@@ -1078,9 +1078,20 @@ def summary(request):
         pf_eligible = basic_salary <= 15000
         esi_eligible = basic_salary <= 21000
         
+        # Deductions
+        pf_eligible = basic_salary <= 15000
+        esi_eligible = basic_salary <= 21000
+        
         # CHECK FOR MANUAL PF
         manual_pf = form.cleaned_data.get('manual_pf')
-        if manual_pf is not None:
+        
+        # PERSISTENCE LOGIC: If form manual_pf is empty, but we have a payment record, use the snapshotted PF
+        if manual_pf is None and salary_payment:
+             pf = salary_payment.pf_deduction
+             pf_eligible = True # Treat as manual override
+             # Inject back into form for UI visibility
+             form.fields['manual_pf'].initial = pf
+        elif manual_pf is not None:
              pf = manual_pf
              pf_eligible = True # Force eligible if manually entered
         elif pf_eligible:
@@ -1090,7 +1101,14 @@ def summary(request):
 
         # CHECK FOR MANUAL ESI
         manual_esi = form.cleaned_data.get('manual_esi')
-        if manual_esi is not None:
+        
+        # PERSISTENCE LOGIC: If form manual_esi is empty, but we have a payment record, use the snapshotted ESI
+        if manual_esi is None and salary_payment:
+             esi = salary_payment.esi_deduction
+             esi_eligible = True # Treat as manual override
+             # Inject back into form for UI visibility
+             form.fields['manual_esi'].initial = esi
+        elif manual_esi is not None:
              esi = manual_esi
              esi_eligible = True # Force eligible if manually entered
         elif esi_eligible:
@@ -1101,6 +1119,8 @@ def summary(request):
         # Employer PF Calculation
         if manual_pf is not None:
             employer_pf = manual_pf # 1:1 Ratio for Manual Override
+        elif manual_pf is None and salary_payment:
+            employer_pf = salary_payment.employer_pf # Use snapshot
         elif pf_eligible:
             employer_pf = earned_basic * Decimal('0.12')
         else:
@@ -1110,6 +1130,8 @@ def summary(request):
         if manual_esi is not None:
              # Ratio: 3.25 / 0.75 = 4.3333... for Manual Override
              employer_esi = manual_esi * (Decimal('3.25') / Decimal('0.75'))
+        elif manual_esi is None and salary_payment:
+             employer_esi = salary_payment.employer_esi # Use snapshot
         elif esi_eligible:
              employer_esi = earned_basic * Decimal('0.0325') 
         else:
