@@ -2202,6 +2202,197 @@ def export_salary_advances_csv(request):
 
     return response
 
+def calculate_salary_for_month(employee, month, year):
+    """
+    Helper to calculate salary components for an employee for a specific month.
+    Used by monthly_salary_report and toggle_salary_status.
+    Returns a dict with calculated values.
+    """
+    _, num_days = calendar.monthrange(year, month)
+    start_date = datetime.date(year, month, 1)
+    end_date = datetime.date(year, month, num_days)
+    
+    holidays_qs = Holiday.objects.filter(date__range=[start_date, end_date])
+    holiday_set = {h.date for h in holidays_qs}
+    
+    # Leaves
+    leaves = Leave.objects.filter(employee=employee, start_date__lte=end_date, end_date__gte=start_date, status='Approved')
+    
+    basic = employee.basic_salary
+    if not basic: basic = Decimal(0)
+    daily_rate = basic / Decimal(30)
+    
+    # Overtime & Presence
+    att_records = Attendance.objects.filter(employee=employee, date__range=[start_date, end_date])
+    total_regular_seconds = 0
+    total_overtime_seconds = 0
+    
+    att_map = {att.date: att for att in att_records}
+    leave_map = {}
+    for leaves_req in leaves:
+            c = max(leaves_req.start_date, start_date)
+            e = min(leaves_req.end_date, end_date)
+            current = c
+            while current <= e:
+                leave_map[current] = leaves_req.leave_type
+                current += datetime.timedelta(days=1)
+
+    current_iter_date = start_date
+    while current_iter_date <= end_date:
+        day_record = att_map.get(current_iter_date)
+        has_record = day_record is not None
+        
+        if day_record and day_record.check_in_time and day_record.check_out_time:
+                check_in = datetime.datetime.combine(current_iter_date, day_record.check_in_time)
+                check_out = datetime.datetime.combine(current_iter_date, day_record.check_out_time)
+                if check_out < check_in: check_out += datetime.timedelta(days=1)
+                
+                raw_seconds = (check_out - check_in).total_seconds()
+                if raw_seconds > 0:
+                    deduction = 3600
+                    if day_record.no_break: deduction = 0
+                    seconds = raw_seconds - deduction
+                    if seconds < 0: seconds = 0
+                    
+                    if current_iter_date in holiday_set:
+                        total_regular_seconds += 28800
+                        total_overtime_seconds += seconds
+                    else:
+                        if seconds > 28800:
+                            total_regular_seconds += 28800
+                            total_overtime_seconds += (seconds - 28800)
+                        else:
+                            total_regular_seconds += seconds
+
+        if not has_record:
+                if current_iter_date in leave_map:
+                    l_type = leave_map[current_iter_date]
+                    if l_type == 'Paid':
+                        total_regular_seconds += 28800
+                elif current_iter_date in holiday_set:
+                    total_regular_seconds += 28800
+        
+        current_iter_date += datetime.timedelta(days=1)
+
+    total_grand_seconds = total_regular_seconds + total_overtime_seconds
+    total_minutes_worked = int(total_grand_seconds / 60)
+    
+    ot_h = int(total_overtime_seconds // 3600)
+    ot_m = int((total_overtime_seconds % 3600) // 60)
+    overtime_hours_str = f"{ot_h:02d}:{ot_m:02d}"
+    
+    per_minute_wage = Decimal(0)
+    if basic > 0:
+        per_minute_wage = (daily_rate / Decimal(480)).quantize(Decimal("0.01"))
+    
+    ot_minutes = int(total_overtime_seconds / 60)
+    total_earned = Decimal(total_minutes_worked) * per_minute_wage
+    ot_amount = Decimal(ot_minutes) * per_minute_wage
+    earned_basic_regular = total_earned - ot_amount
+    total_allowances = sum([ea.amount for ea in employee.employeeallowance_set.all()])
+    gross_salary = total_earned + total_allowances
+    
+    pf = Decimal(0)
+    esi = Decimal(0)
+    if basic <= 15000: pf = total_earned * Decimal('0.12')
+    if basic <= 21000: esi = gross_salary * Decimal('0.0075')
+
+    advances_total = SalaryAdvance.objects.filter(employee=employee, date__range=[start_date, end_date]).aggregate(sum=Sum('amount'))['sum'] or 0
+    total_deductions = pf + esi + advances_total
+    
+    leave_cut_amount = basic - earned_basic_regular
+    if leave_cut_amount < 0: leave_cut_amount = 0
+    
+    # Calculate unpaid leave days for display
+    unpaid_leave_days = 0
+    for leave in leaves:
+        l_start = max(leave.start_date, start_date)
+        l_end = min(leave.end_date, end_date)
+        curr = l_start
+        while curr <= l_end:
+             if leave.leave_type == 'Unpaid': unpaid_leave_days += 1
+             curr += datetime.timedelta(days=1)
+             
+    # Calculate working hours str
+    working_hours_decimal = total_regular_seconds / 3600.0
+    wh_hours = int(working_hours_decimal)
+    wh_minutes = int((working_hours_decimal - wh_hours) * 60)
+    total_working_hours_str = f"{wh_hours:02d}:{wh_minutes:02d}"
+
+
+    return {
+        'basic': basic,
+        'allowances': total_allowances,
+        'overtime_hours': overtime_hours_str,
+        'overtime_amount': ot_amount,
+        'salary_advance': advances_total,
+        'esic': esi,
+        'pf': pf,
+        'leaves': unpaid_leave_days,
+        'leave_cut_amount': leave_cut_amount,
+        'working_hours': total_working_hours_str,
+        'total_salary': gross_salary,
+        'net_salary': gross_salary - total_deductions,
+        'total_deductions': total_deductions,
+        # Helper fields for saving
+        'gross_salary': gross_salary, 
+        'salary_payable': gross_salary - total_deductions,
+        'pf_deduction': pf,
+        'esi_deduction': esi,
+        'employer_pf': pf, # Placeholder - assuming 1:1 if not calc
+        'employer_esi': esi * Decimal('3.25') if esi > 0 else Decimal(0), # 3.25% if ESI applicable
+        'leave_deduction': leave_cut_amount,
+    }
+
+def get_monthly_report_rows(employees, month, year):
+    """
+    Generates the list of report rows for the Monthly Salary Report.
+    Handles Live Calculation + Snapshot Override.
+    """
+    # Fetch snapshots
+    paid_payments = SalaryPayment.objects.filter(month=month, year=year, is_paid=True)
+    payment_map = {p.employee_id: p for p in paid_payments}
+    
+    report_data = []
+    
+    for emp in employees:
+        # 1. Calculate Live Data (Hours, default money)
+        data = calculate_salary_for_month(emp, month, year)
+        
+        # 2. Override with Snapshot if exists (For Money fields)
+        payment_snapshot = payment_map.get(emp.id)
+        is_paid = False
+        
+        if payment_snapshot:
+            is_paid = True
+            # Override money fields
+            data['pf'] = payment_snapshot.pf_deduction
+            data['esic'] = payment_snapshot.esi_deduction
+            data['leave_cut_amount'] = payment_snapshot.leave_deduction
+            data['salary_advance'] = payment_snapshot.salary_advance
+            data['total_salary'] = payment_snapshot.gross_salary
+            data['net_salary'] = payment_snapshot.net_salary
+        
+        report_data.append({
+            'emp_id': emp.pk,
+            'code': emp.employee_code,
+            'name': emp.full_name,
+            'basic': data['basic'],
+            'allowances': data['allowances'],
+            'overtime_hours': data['overtime_hours'],
+            'overtime_amount': round(data['overtime_amount'], 2),
+            'salary_advance': data['salary_advance'],
+            'esic': round(data['esic'], 2),
+            'pf': round(data['pf'], 2),
+            'leaves': data['leaves'],
+            'leave_cut_amount': round(data['leave_cut_amount'], 2),
+            'working_hours': data['working_hours'],
+            'total_salary': round(data['total_salary'], 2),
+            'net_salary': round(data['net_salary'], 2),
+            'is_paid': is_paid
+        })
+    return report_data
+
 @hr_required
 def monthly_salary_report(request):
     current_date = datetime.date.today()
@@ -2218,161 +2409,23 @@ def monthly_salary_report(request):
     working_days_in_month = num_days - holidays_count
     if working_days_in_month <= 0: working_days_in_month = 1
     
-    # Filter for Locked/Paid Employees Only
-    paid_payments = SalaryPayment.objects.filter(
-        month=selected_month, 
-        year=selected_year, 
-        is_paid=True
-    )
-    paid_employee_ids = paid_payments.values_list('employee_id', flat=True)
+    # Filter Logic
+    payment_status = request.GET.get('payment_status', 'locked') # locked, all, unpaid
     
-    # Create Map for fast lookup of Snapshot data
-    payment_map = {p.employee_id: p for p in paid_payments}
+    # Identify Paid IDs for filtering
+    paid_employee_ids = list(SalaryPayment.objects.filter(
+        month=selected_month, year=selected_year, is_paid=True
+    ).values_list('employee_id', flat=True))
     
-    employees = Employee.objects.filter(id__in=paid_employee_ids)
+    if payment_status == 'locked':
+        employees = Employee.objects.filter(id__in=paid_employee_ids)
+    elif payment_status == 'unpaid':
+        employees = Employee.objects.exclude(id__in=paid_employee_ids)
+    else: # all
+        employees = Employee.objects.all()
     
-    report_data = []
-    
-    for emp in employees:
-        # ... (Calculations for hours/leaves remain for display stats) ...
-        present_days = Attendance.objects.filter(employee=emp, date__range=[start_date, end_date]).count()
-        leaves = Leave.objects.filter(employee=emp, start_date__lte=end_date, end_date__gte=start_date, status='Approved')
-        
-        # Calculate Leave Days excluding Holidays
-        unpaid_leave_days = 0
-        total_leave_days = 0 
-        for leave in leaves:
-            l_start = max(leave.start_date, start_date)
-            l_end = min(leave.end_date, end_date)
-            curr_date = l_start
-            while curr_date <= l_end:
-                total_leave_days += 1
-                if leave.leave_type == 'Unpaid':
-                    unpaid_leave_days += 1
-                curr_date += datetime.timedelta(days=1)
-        
-        basic = emp.basic_salary
-        if not basic: basic = Decimal(0)
-        daily_rate = basic / Decimal(30)
-        
-        # Overtime & Presence Calculation
-        att_records = Attendance.objects.filter(employee=emp, date__range=[start_date, end_date])
-        total_regular_seconds = 0
-        total_overtime_seconds = 0
-        
-        att_map = {att.date: att for att in att_records}
-        leave_map = {}
-        for leaves_req in leaves:
-             c = max(leaves_req.start_date, start_date)
-             e = min(leaves_req.end_date, end_date)
-             current = c
-             while current <= e:
-                 leave_map[current] = leaves_req.leave_type
-                 current += datetime.timedelta(days=1)
-
-        current_iter_date = start_date
-        
-        while current_iter_date <= end_date:
-            day_record = att_map.get(current_iter_date)
-            has_record = day_record is not None
-            
-            if day_record and day_record.check_in_time and day_record.check_out_time:
-                 check_in = datetime.datetime.combine(current_iter_date, day_record.check_in_time)
-                 check_out = datetime.datetime.combine(current_iter_date, day_record.check_out_time)
-                 if check_out < check_in: check_out += datetime.timedelta(days=1)
-                 
-                 raw_seconds = (check_out - check_in).total_seconds()
-                 if raw_seconds > 0:
-                     deduction = 3600
-                     if day_record.no_break: deduction = 0
-                     seconds = raw_seconds - deduction
-                     if seconds < 0: seconds = 0
-                     
-                     if current_iter_date in holiday_set:
-                         total_regular_seconds += 28800
-                         total_overtime_seconds += seconds
-                     else:
-                         if seconds > 28800:
-                             total_regular_seconds += 28800
-                             total_overtime_seconds += (seconds - 28800)
-                         else:
-                             total_regular_seconds += seconds
-
-            if not has_record:
-                 if current_iter_date in leave_map:
-                     l_type = leave_map[current_iter_date]
-                     if l_type == 'Paid':
-                         total_regular_seconds += 28800
-                 elif current_iter_date in holiday_set:
-                     total_regular_seconds += 28800
-            
-            current_iter_date += datetime.timedelta(days=1)
-
-        total_grand_seconds = total_regular_seconds + total_overtime_seconds
-        total_minutes_worked = int(total_grand_seconds / 60)
-        
-        ot_h = int(total_overtime_seconds // 3600)
-        ot_m = int((total_overtime_seconds % 3600) // 60)
-        overtime_hours_str = f"{ot_h:02d}:{ot_m:02d}"
-        
-        per_minute_wage = Decimal(0)
-        if basic > 0:
-            per_minute_wage = (daily_rate / Decimal(480)).quantize(Decimal("0.01"))
-        
-        ot_minutes = int(total_overtime_seconds / 60)
-        total_earned = Decimal(total_minutes_worked) * per_minute_wage
-        ot_amount = Decimal(ot_minutes) * per_minute_wage
-        earned_basic_regular = total_earned - ot_amount
-        total_allowances = sum([ea.amount for ea in emp.employeeallowance_set.all()])
-        gross_salary = total_earned + total_allowances
-        
-        pf = Decimal(0)
-        esi = Decimal(0)
-        if basic <= 15000: pf = total_earned * Decimal('0.12')
-        if basic <= 21000: esi = gross_salary * Decimal('0.0075')
-
-        advances_total = SalaryAdvance.objects.filter(employee=emp, date__range=[start_date, end_date]).aggregate(sum=Sum('amount'))['sum'] or 0
-        total_deductions = pf + esi + advances_total
-        net_salary = gross_salary - total_deductions
-        
-        leave_cut_amount = basic - earned_basic_regular
-        if leave_cut_amount < 0: leave_cut_amount = 0
-        
-        # --- SNAPSHOT OVERRIDE LOGIC ---
-        # Override calculated money values with Locked Snapshot values if available
-        payment_snapshot = payment_map.get(emp.id)
-        if payment_snapshot:
-            pf = payment_snapshot.pf_deduction
-            esi = payment_snapshot.esi_deduction
-            leave_cut_amount = payment_snapshot.leave_deduction
-            advances_total = payment_snapshot.salary_advance
-            gross_salary = payment_snapshot.gross_salary
-            net_salary = payment_snapshot.net_salary
-        
-        working_hours_decimal = total_regular_seconds / 3600.0
-        wh_hours = int(working_hours_decimal)
-        wh_minutes = int((working_hours_decimal - wh_hours) * 60)
-        total_working_hours_str = f"{wh_hours:02d}:{wh_minutes:02d}"
-        
-        report_data.append({
-            'emp_id': emp.pk,
-            'code': emp.employee_code,
-            'name': emp.full_name,
-            'doj': emp.joining_date,
-            'basic': basic,
-            'allowances': total_allowances,
-            'overtime_hours': overtime_hours_str,
-            'overtime_amount': round(ot_amount, 2),
-            'salary_advance': advances_total,
-            'esic': round(esi, 2),
-            'pf': round(pf, 2),
-            'leaves': unpaid_leave_days,
-            'leave_cut_amount': round(leave_cut_amount, 2),
-            'working_hours': total_working_hours_str,
-            'total_salary': round(gross_salary, 2),
-            'net_salary': round(net_salary, 2)
-        })
-
+    # Generate Report Data
+    report_data = get_monthly_report_rows(employees, selected_month, selected_year)
 
     is_month_locked = AttendanceLock.objects.filter(
         month=selected_month,
@@ -2399,11 +2452,152 @@ def monthly_salary_report(request):
         'totals': totals,
         'selected_month': selected_month,
         'selected_year': selected_year,
+        'payment_status': payment_status,
+        'is_status_locked': payment_status == 'locked',
+        'is_status_all': payment_status == 'all',
+        'is_status_unpaid': payment_status == 'unpaid',
         'is_month_locked': is_month_locked,
         'months': list(enumerate(calendar.month_name))[1:],
         'years': range(current_date.year - 2, current_date.year + 3)
     }
     return render(request, 'core/monthly_salary_report.html', context)
+
+@hr_required
+def toggle_salary_status(request):
+    # ... (content of toggle_salary_status)
+    if request.method == 'POST':
+        try:
+             # ... (existing content)
+            employee_id = request.POST.get('employee_id')
+            month = int(request.POST.get('month'))
+            year = int(request.POST.get('year'))
+            action = request.POST.get('action')
+            
+            employee = get_object_or_404(Employee, pk=employee_id)
+            
+            # Preserve filter params for redirect
+            payment_status = request.POST.get('payment_status', 'locked')
+            redirect_url = f"{reverse('monthly_salary_report')}?month={month}&year={year}&payment_status={payment_status}"
+            
+            if action == 'unpay':
+                password = request.POST.get('password')
+                if password == '1234':
+                    payment = SalaryPayment.objects.filter(employee=employee, month=month, year=year).first()
+                    if payment:
+                        payment.is_paid = False
+                        payment.save()
+                        messages.warning(request, f"Salary for {employee.full_name} UNLOCKED.")
+                else:
+                    messages.error(request, "Incorrect Password.")
+            
+            elif action == 'pay':
+                # Calculate Salary Data
+                data = calculate_salary_for_month(employee, month, year)
+                
+                pass # Already handled in update_or_create below
+                
+                SalaryPayment.objects.update_or_create(
+                    employee=employee, month=month, year=year,
+                    defaults={
+                        'amount': data['salary_payable'],
+                        'gross_salary': data['gross_salary'],
+                        'net_salary': data['salary_payable'],
+                        'pf_deduction': data['pf_deduction'],
+                        'esi_deduction': data['esi_deduction'],
+                        'employer_pf': data['employer_pf'],
+                        'employer_esi': data['employer_esi'],
+                        'leave_deduction': data['leave_deduction'],
+                        'salary_advance': data['salary_advance'],
+                        'is_paid': True
+                    }
+                )
+                messages.success(request, f"Salary for {employee.full_name} marked as PAID.")
+            
+            return redirect(redirect_url)
+            
+        except Exception as e:
+            messages.error(request, f"Error: {e}")
+            return redirect('monthly_salary_report')
+    
+    return redirect('monthly_salary_report')
+
+@hr_required
+def export_monthly_salary_report(request):
+    import csv
+    from django.http import HttpResponse
+
+    current_date = datetime.date.today()
+    selected_month = int(request.GET.get('month', current_date.month))
+    selected_year = int(request.GET.get('year', current_date.year))
+    payment_status = request.GET.get('payment_status', 'locked')
+
+    # Identify Paid IDs
+    paid_employee_ids = list(SalaryPayment.objects.filter(
+        month=selected_month, year=selected_year, is_paid=True
+    ).values_list('employee_id', flat=True))
+    
+    if payment_status == 'locked':
+        employees = Employee.objects.filter(id__in=paid_employee_ids)
+    elif payment_status == 'unpaid':
+        employees = Employee.objects.exclude(id__in=paid_employee_ids)
+    else: # all
+        employees = Employee.objects.all()
+
+    # Generate Data
+    report_data = get_monthly_report_rows(employees, selected_month, selected_year)
+
+    # Response
+    response = HttpResponse(content_type='text/csv')
+    filename = f"Salary_Report_{calendar.month_name[selected_month]}_{selected_year}.csv"
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+    writer = csv.writer(response)
+    # Headers
+    writer.writerow([
+        'Code', 'Name', 'Basic', 'Allowances', 'Wrk Hrs', 'OT (Hrs)', 'OT Amt', 
+        'Advance', 'ESIC', 'PF', 'Leaves', 'Leave Cut', 'Gross', 'Net Salary', 'Status'
+    ])
+
+    # Data Rows
+    for row in report_data:
+        status_str = "PAID" if row['is_paid'] else "Pending"
+        writer.writerow([
+            row['code'],
+            row['name'],
+            row['basic'],
+            row['allowances'],
+            row['working_hours'],
+            row['overtime_hours'],
+            row['overtime_amount'],
+            row['salary_advance'],
+            row['esic'],
+            row['pf'],
+            row['leaves'],
+            row['leave_cut_amount'],
+            row['total_salary'],
+            row['net_salary'],
+            status_str
+        ])
+    
+    # Totals Row
+    if report_data:
+        writer.writerow([
+            'TOTAL', '',
+            sum(d['basic'] for d in report_data),
+            sum(d['allowances'] for d in report_data),
+            '', '', 
+            sum(d['overtime_amount'] for d in report_data),
+            sum(d['salary_advance'] for d in report_data),
+            sum(d['esic'] for d in report_data),
+            sum(d['pf'] for d in report_data),
+            '', 
+            sum(d['leave_cut_amount'] for d in report_data),
+            sum(d['total_salary'] for d in report_data),
+            sum(d['net_salary'] for d in report_data),
+            ''
+        ])
+
+    return response
 
 @hr_required
 def toggle_no_break(request, pk):

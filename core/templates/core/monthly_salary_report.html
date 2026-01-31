@@ -37,7 +37,16 @@
                     {% endfor %}
                 </select>
             </label>
+            <label>Status:
+                <select name="payment_status" class="form-control ml-2">
+                    <option value="locked" {% if is_status_locked %}selected{% endif %}>Locked/Paid Only</option>
+                    <option value="all" {% if is_status_all %}selected{% endif %}>All Employees</option>
+                    <option value="unpaid" {% if is_status_unpaid %}selected{% endif %}>Unpaid Only</option>
+                </select>
+            </label>
             <button type="submit" class="btn btn-primary">Generate Report</button>
+            <button type="submit" formaction="{% url 'export_monthly_salary_report' %}" class="btn btn-success">Export
+                CSV</button>
             <button type="button" class="btn btn-secondary" onclick="window.print()">Print</button>
         </form>
     </div>
@@ -170,6 +179,7 @@
                         <th>Gross</th>
                         <th>Net Salary</th>
                         <th>Slip</th>
+                        <th>Action</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -194,6 +204,29 @@
                             <a href="{% url 'summary' %}?employee={{ row.emp_id }}&month={{ selected_month }}&year={{ selected_year }}&print_now=true"
                                 target="_blank" class="btn btn-xs btn-info">Print</a>
                         </td>
+                        <td class="text-center">
+                            {% if row.is_paid %}
+                            <div class="d-flex align-items-center justify-content-center gap-1">
+                                <span class="badge bg-success">PAID</span>
+                                <button type="button" class="btn btn-xs btn-warning"
+                                    onclick="openUnlockReportModal('{{ row.emp_id }}')">
+                                    <i class="fas fa-lock"></i>
+                                </button>
+                            </div>
+                            {% else %}
+                            <form action="{% url 'toggle_salary_status' %}" method="post" style="display:inline;">
+                                {% csrf_token %}
+                                <input type="hidden" name="employee_id" value="{{ row.emp_id }}">
+                                <input type="hidden" name="month" value="{{ selected_month }}">
+                                <input type="hidden" name="year" value="{{ selected_year }}">
+                                <input type="hidden" name="action" value="pay">
+                                <input type="hidden" name="payment_status" value="{{ payment_status }}">
+                                <button type="submit" class="btn btn-xs btn-success">
+                                    <i class="fas fa-check"></i> Pay
+                                </button>
+                            </form>
+                            {% endif %}
+                        </td>
                     </tr>
                     {% empty %}
                     <tr>
@@ -217,6 +250,7 @@
                         <th class="text-end">{{ totals.total_salary }}</th>
                         <th class="text-end">{{ totals.net_salary }}</th>
                         <th></th>
+                        <th></th>
                     </tr>
                 </tfoot>
             </table>
@@ -224,4 +258,37 @@
         {% endif %}
     </div>
 </div>
+
+<!-- Unlock Modal -->
+<div class="modal fade" id="unlockReportModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <form action="{% url 'toggle_salary_status' %}" method="post" class="modal-content">
+            {% csrf_token %}
+            <input type="hidden" name="month" value="{{ selected_month }}">
+            <input type="hidden" name="year" value="{{ selected_year }}">
+            <input type="hidden" name="action" value="unpay">
+            <input type="hidden" name="payment_status" value="{{ payment_status }}">
+            <input type="hidden" name="employee_id" id="unlock_report_emp_id">
+
+            <div class="modal-header">
+                <h5 class="modal-title">Unlock Salary</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="password" name="password" class="form-control" placeholder="Password (1234)" required>
+            </div>
+            <div class="modal-footer">
+                <button type="submit" class="btn btn-warning btn-sm">Unlock</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    function openUnlockReportModal(empId) {
+        document.getElementById('unlock_report_emp_id').value = empId;
+        var myModal = new bootstrap.Modal(document.getElementById('unlockReportModal'));
+        myModal.show();
+    }
+</script>
 {% endblock %}
