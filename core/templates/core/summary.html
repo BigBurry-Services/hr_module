@@ -141,6 +141,10 @@
                 <!-- Show Reports ONLY if Locked -->
                 <button type="submit" name="action" value="download_pdf" class="btn btn-secondary no-print">Download
                     PDF</button>
+                <button type="submit" formaction="{% url 'export_monthly_attendance_csv' %}"
+                    class="btn btn-outline-success no-print">
+                    <i class="fas fa-file-csv"></i> Export Attendance (CSV)
+                </button>
                 <button type="button" onclick="window.print()" class="btn btn-secondary no-print"><i
                         class="fas fa-print"></i>
                     Print Slip</button>

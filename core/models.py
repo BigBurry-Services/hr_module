@@ -101,6 +101,16 @@ class EmployeeAllowance(models.Model):
         return f"{self.employee.full_name} - {self.allowance.name}: {self.amount}"
 
 
+class EmployeeDocument(models.Model):
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='documents')
+    file = models.FileField(upload_to='employee_documents/')
+    description = models.CharField(max_length=255, blank=True, null=True)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.employee.full_name} - {self.file.name}"
+
+
 
 class Attendance(models.Model):
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE)

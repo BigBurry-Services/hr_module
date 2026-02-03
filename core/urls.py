@@ -55,6 +55,7 @@ urlpatterns = [
     path('employees/export/', views.export_employees_csv, name='export_employees_csv'),
     path('employees/<int:pk>/export/', views.export_single_employee_csv, name='export_single_employee_csv'),
     path('attendance/export/', views.export_attendance_csv, name='export_attendance_csv'),
+    path('attendance/monthly-export/', views.export_monthly_attendance_csv, name='export_monthly_attendance_csv'),
 
     # Summary URL
     path('summary/', views.summary, name='summary'),

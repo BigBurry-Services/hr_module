@@ -58,203 +58,222 @@
             <strong>Attendance Marking</strong> page. This ensures all attendance data is verified and finalized.
         </div>
         {% else %}
-        <style>
-            .spreadsheet-container {
-                max-height: 80vh;
-                overflow: auto;
-                border-top: 1px solid #dee2e6;
-            }
+        <form method="post" action="{% url 'export_monthly_attendance_csv' %}">
+            {% csrf_token %}
+            <input type="hidden" name="month" value="{{ selected_month }}">
+            <input type="hidden" name="year" value="{{ selected_year }}">
 
-            .spreadsheet-table {
-                font-size: 12px;
-                margin-bottom: 0;
-            }
-
-            .spreadsheet-table thead th {
-                position: sticky;
-                top: 0;
-                background-color: #f8f9fa;
-                z-index: 10;
-                box-shadow: 0 1px 0 #dee2e6;
-                vertical-align: middle;
-                text-align: center;
-                white-space: nowrap;
-                border: 1px solid #dee2e6;
-                padding: 8px 12px;
-            }
-
-            .spreadsheet-table td {
-                white-space: nowrap;
-                vertical-align: middle;
-                border: 1px solid #dee2e6;
-                padding: 4px 8px;
-            }
-
-            .spreadsheet-table tbody tr:hover {
-                background-color: #e8f0fe;
-            }
-
-            .spreadsheet-table .num-cell {
-                text-align: right;
-                font-family: 'Courier New', Courier, monospace;
-            }
-
-            @media print {
-                @page {
-                    size: landscape;
-                    margin: 0.5cm;
-                }
-
-                body {
-                    margin: 0;
-                    padding: 0;
-                    background-color: white !important;
-                }
-
-                .navbar,
-                .main-sidebar,
-                .main-header,
-                .card-header,
-                .nav-tabs,
-                footer,
-                .main-footer,
-                .preloader {
-                    display: none !important;
-                }
-
-                .content-wrapper,
-                .card,
-                .card-body {
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    border: none !important;
-                    background-color: white !important;
-                    box-shadow: none !important;
-                }
-
+            <div class="p-3 bg-light border-bottom d-flex justify-content-between align-items-center no-print">
+                <span class="text-muted"><i class="fas fa-info-circle"></i> Select employees to export their monthly
+                    attendance data.</span>
+                <button type="submit" class="btn btn-outline-success">
+                    <i class="fas fa-file-export"></i> Export Selected Attendance (CSV)
+                </button>
+            </div>
+            <style>
                 .spreadsheet-container {
-                    max-height: none !important;
-                    overflow: visible !important;
-                    border: none !important;
+                    max-height: 80vh;
+                    overflow: auto;
+                    border-top: 1px solid #dee2e6;
                 }
 
                 .spreadsheet-table {
-                    width: 100% !important;
-                    font-size: 10px !important;
-                    /* Smaller font for print */
+                    font-size: 12px;
+                    margin-bottom: 0;
                 }
 
-                .spreadsheet-table th {
-                    background-color: #f8f9fa !important;
-                    color: black !important;
-                    position: static !important;
-                    /* No sticky on print */
-                    -webkit-print-color-adjust: exact;
-                    print-color-adjust: exact;
+                .spreadsheet-table thead th {
+                    position: sticky;
+                    top: 0;
+                    background-color: #f8f9fa;
+                    z-index: 10;
+                    box-shadow: 0 1px 0 #dee2e6;
+                    vertical-align: middle;
+                    text-align: center;
+                    white-space: nowrap;
+                    border: 1px solid #dee2e6;
+                    padding: 8px 12px;
                 }
 
-                .spreadsheet-table td,
-                .spreadsheet-table th {
-                    border: 1px solid black !important;
+                .spreadsheet-table td {
+                    white-space: nowrap;
+                    vertical-align: middle;
+                    border: 1px solid #dee2e6;
+                    padding: 4px 8px;
                 }
-            }
-        </style>
-        <div class="spreadsheet-container">
-            <table class="table table-bordered table-hover spreadsheet-table">
-                <thead>
-                    <tr>
-                        <th>Code</th>
-                        <th>Name</th>
 
-                        <th>Basic</th>
-                        <th>Allowances</th>
-                        <th>Wrk Hrs</th>
-                        <th>OT (Hrs)</th>
-                        <th>OT Amt</th>
-                        <th>Advance</th>
-                        <th>ESIC</th>
-                        <th>PF</th>
-                        <th>Leaves</th>
-                        <th>Leave Cut</th>
-                        <th>Gross</th>
-                        <th>Net Salary</th>
-                        <th>Slip</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for row in report_data %}
-                    <tr>
-                        <td>{{ row.code }}</td>
-                        <td>{{ row.name }}</td>
+                .spreadsheet-table tbody tr:hover {
+                    background-color: #e8f0fe;
+                }
 
-                        <td class="num-cell">{{ row.basic }}</td>
-                        <td class="num-cell">{{ row.allowances }}</td>
-                        <td class="num-cell">{{ row.working_hours }}</td>
-                        <td class="num-cell">{{ row.overtime_hours }}</td>
-                        <td class="num-cell">{{ row.overtime_amount }}</td>
-                        <td class="num-cell">{{ row.salary_advance }}</td>
-                        <td class="num-cell">{{ row.esic }}</td>
-                        <td class="num-cell">{{ row.pf }}</td>
-                        <td class="num-cell">{{ row.leaves }}</td>
-                        <td class="num-cell">{{ row.leave_cut_amount }}</td>
-                        <td class="num-cell">{{ row.total_salary }}</td>
-                        <td class="num-cell"><strong>{{ row.net_salary }}</strong></td>
-                        <td class="text-center">
-                            <a href="{% url 'summary' %}?employee={{ row.emp_id }}&month={{ selected_month }}&year={{ selected_year }}&print_now=true"
-                                target="_blank" class="btn btn-xs btn-info">Print</a>
-                        </td>
-                        <td class="text-center">
-                            {% if row.is_paid %}
-                            <div class="d-flex align-items-center justify-content-center gap-1">
-                                <span class="badge bg-success">PAID</span>
-                                <button type="button" class="btn btn-xs btn-warning"
-                                    onclick="openUnlockReportModal('{{ row.emp_id }}')">
-                                    <i class="fas fa-lock"></i>
-                                </button>
-                            </div>
-                            {% else %}
-                            <form action="{% url 'toggle_salary_status' %}" method="post" style="display:inline;">
-                                {% csrf_token %}
-                                <input type="hidden" name="employee_id" value="{{ row.emp_id }}">
-                                <input type="hidden" name="month" value="{{ selected_month }}">
-                                <input type="hidden" name="year" value="{{ selected_year }}">
-                                <input type="hidden" name="action" value="pay">
-                                <input type="hidden" name="payment_status" value="{{ payment_status }}">
-                                <button type="submit" class="btn btn-xs btn-success">
-                                    <i class="fas fa-check"></i> Pay
-                                </button>
-                            </form>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="15" class="text-center p-3">No data found for this month.</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-                <tfoot class="table-dark">
-                    <tr>
-                        <th colspan="2" class="text-end">TOTAL</th>
-                        <th class="text-end">{{ totals.basic }}</th>
-                        <th class="text-end">{{ totals.allowances }}</th>
-                        <th></th>
-                        <th></th>
-                        <th class="text-end">{{ totals.overtime_amount }}</th>
-                        <th class="text-end">{{ totals.salary_advance }}</th>
-                        <th class="text-end">{{ totals.esic }}</th>
-                        <th class="text-end">{{ totals.pf }}</th>
-                        <th></th>
-                        <th class="text-end">{{ totals.leave_cut_amount }}</th>
-                        <th class="text-end">{{ totals.total_salary }}</th>
-                        <th class="text-end">{{ totals.net_salary }}</th>
-                        <th></th>
-                        <th></th>
-                    </tr>
-                </tfoot>
-            </table>
-        </div>
+                .spreadsheet-table .num-cell {
+                    text-align: right;
+                    font-family: 'Courier New', Courier, monospace;
+                }
+
+                @media print {
+                    @page {
+                        size: landscape;
+                        margin: 0.5cm;
+                    }
+
+                    body {
+                        margin: 0;
+                        padding: 0;
+                        background-color: white !important;
+                    }
+
+                    .navbar,
+                    .main-sidebar,
+                    .main-header,
+                    .card-header,
+                    .nav-tabs,
+                    footer,
+                    .main-footer,
+                    .preloader {
+                        display: none !important;
+                    }
+
+                    .content-wrapper,
+                    .card,
+                    .card-body {
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        border: none !important;
+                        background-color: white !important;
+                        box-shadow: none !important;
+                    }
+
+                    .spreadsheet-container {
+                        max-height: none !important;
+                        overflow: visible !important;
+                        border: none !important;
+                    }
+
+                    .spreadsheet-table {
+                        width: 100% !important;
+                        font-size: 10px !important;
+                        /* Smaller font for print */
+                    }
+
+                    .spreadsheet-table th {
+                        background-color: #f8f9fa !important;
+                        color: black !important;
+                        position: static !important;
+                        /* No sticky on print */
+                        -webkit-print-color-adjust: exact;
+                        print-color-adjust: exact;
+                    }
+
+                    .spreadsheet-table td,
+                    .spreadsheet-table th {
+                        border: 1px solid black !important;
+                    }
+                }
+            </style>
+            <div class="spreadsheet-container">
+                <table class="table table-bordered table-hover spreadsheet-table">
+                    <thead>
+                        <tr>
+                            <th class="no-print"><input type="checkbox" id="select-all-employees"></th>
+                            <th>Code</th>
+                            <th>Name</th>
+
+                            <th>Basic</th>
+                            <th>Allowances</th>
+                            <th>Wrk Hrs</th>
+                            <th>OT (Hrs)</th>
+                            <th>OT Amt</th>
+                            <th>Advance</th>
+                            <th>ESIC</th>
+                            <th>PF</th>
+                            <th>Leaves</th>
+                            <th>Leave Cut</th>
+                            <th>Gross</th>
+                            <th>Net Salary</th>
+                            <th>Slip</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in report_data %}
+                        <tr>
+                            <td class="text-center no-print">
+                                <input type="checkbox" name="employee_ids" value="{{ row.emp_id }}"
+                                    class="employee-checkbox">
+                            </td>
+                            <td>{{ row.code }}</td>
+                            <td>{{ row.name }}</td>
+
+                            <td class="num-cell">{{ row.basic }}</td>
+                            <td class="num-cell">{{ row.allowances }}</td>
+                            <td class="num-cell">{{ row.working_hours }}</td>
+                            <td class="num-cell">{{ row.overtime_hours }}</td>
+                            <td class="num-cell">{{ row.overtime_amount }}</td>
+                            <td class="num-cell">{{ row.salary_advance }}</td>
+                            <td class="num-cell">{{ row.esic }}</td>
+                            <td class="num-cell">{{ row.pf }}</td>
+                            <td class="num-cell">{{ row.leaves }}</td>
+                            <td class="num-cell">{{ row.leave_cut_amount }}</td>
+                            <td class="num-cell">{{ row.total_salary }}</td>
+                            <td class="num-cell"><strong>{{ row.net_salary }}</strong></td>
+                            <td class="text-center">
+                                <a href="{% url 'summary' %}?employee={{ row.emp_id }}&month={{ selected_month }}&year={{ selected_year }}&print_now=true"
+                                    target="_blank" class="btn btn-xs btn-info">Print</a>
+                            </td>
+                            <td class="text-center">
+                                {% if row.is_paid %}
+                                <div class="d-flex align-items-center justify-content-center gap-1">
+                                    <span class="badge bg-success">PAID</span>
+                                    <button type="button" class="btn btn-xs btn-warning"
+                                        onclick="openUnlockReportModal('{{ row.emp_id }}')">
+                                        <i class="fas fa-lock"></i>
+                                    </button>
+                                </div>
+                                {% else %}
+                                <form action="{% url 'toggle_salary_status' %}" method="post" style="display:inline;">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="employee_id" value="{{ row.emp_id }}">
+                                    <input type="hidden" name="month" value="{{ selected_month }}">
+                                    <input type="hidden" name="year" value="{{ selected_year }}">
+                                    <input type="hidden" name="action" value="pay">
+                                    <input type="hidden" name="payment_status" value="{{ payment_status }}">
+                                    <button type="submit" class="btn btn-xs btn-success">
+                                        <i class="fas fa-check"></i> Pay
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="15" class="text-center p-3">No data found for this month.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot class="table-dark">
+                        <tr>
+                            <th class="no-print"></th>
+                            <th colspan="2" class="text-end">TOTAL</th>
+                            <th class="text-end">{{ totals.basic }}</th>
+                            <th class="text-end">{{ totals.allowances }}</th>
+                            <th></th>
+                            <th></th>
+                            <th class="text-end">{{ totals.overtime_amount }}</th>
+                            <th class="text-end">{{ totals.salary_advance }}</th>
+                            <th class="text-end">{{ totals.esic }}</th>
+                            <th class="text-end">{{ totals.pf }}</th>
+                            <th></th>
+                            <th class="text-end">{{ totals.leave_cut_amount }}</th>
+                            <th class="text-end">{{ totals.total_salary }}</th>
+                            <th class="text-end">{{ totals.net_salary }}</th>
+                            <th></th>
+                            <th></th>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </form>
         {% endif %}
     </div>
 </div>
@@ -290,5 +309,18 @@
         var myModal = new bootstrap.Modal(document.getElementById('unlockReportModal'));
         myModal.show();
     }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const selectAll = document.getElementById('select-all-employees');
+        const checkboxes = document.querySelectorAll('.employee-checkbox');
+
+        if (selectAll) {
+            selectAll.addEventListener('change', function () {
+                checkboxes.forEach(cb => {
+                    cb.checked = selectAll.checked;
+                });
+            });
+        }
+    });
 </script>
 {% endblock %}

@@ -11,7 +11,7 @@ import csv
 from .models import Employee, Attendance, Department, Designation, Allowance, EmployeeAllowance, HRProfile, Holiday, Leave, SalaryAdvance, AttendanceDevice, LeaveType, AttendanceLock, SalaryPayment
 from django.contrib.auth.models import User
 from django.db import transaction
-from .forms import EmployeeForm, RegistrationForm, DepartmentForm, DesignationForm, AllowanceForm, EmployeeAllowanceForm, EmployeeAllowanceFormSet, AttendanceForm, HRProfileForm, HolidayForm, LeaveForm, SalaryAdvanceForm, AttendanceDeviceForm, LeaveTypeForm, SalarySummaryForm
+from .forms import EmployeeForm, RegistrationForm, DepartmentForm, DesignationForm, AllowanceForm, EmployeeAllowanceForm, EmployeeAllowanceFormSet, AttendanceForm, HRProfileForm, HolidayForm, LeaveForm, SalaryAdvanceForm, AttendanceDeviceForm, LeaveTypeForm, SalarySummaryForm, EmployeeDocumentFormSet
 from django.http import JsonResponse
 from .utils import DeviceSyncService
 from .decorators import hr_required, admin_required
@@ -350,12 +350,15 @@ def employee_add(request):
     if request.method == 'POST':
         form = EmployeeForm(request.POST)
         formset = EmployeeAllowanceFormSetDynamic(request.POST)
-        if form.is_valid() and formset.is_valid():
+        doc_formset = EmployeeDocumentFormSet(request.POST, request.FILES)
+        if form.is_valid() and formset.is_valid() and doc_formset.is_valid():
             try:
                 with transaction.atomic():
                     employee = form.save()
                     formset.instance = employee
                     formset.save()
+                    doc_formset.instance = employee
+                    doc_formset.save()
                     messages.success(request, "Employee added successfully.")
                     return redirect('employee_list')
             except Exception as e:
@@ -364,15 +367,19 @@ def employee_add(request):
         else:
             print("Form Errors:", form.errors)
             print("Formset Errors:", formset.errors)
-            print("Formset Non-Form Errors:", formset.non_form_errors())
+            print("Doc Formset Errors:", doc_formset.errors)
             messages.error(request, "Please correct the errors below.")
     else:
         form = EmployeeForm()
-        # Pre-populate with all allowances defaulted to 0
         initial_allowances = [{'allowance': a, 'amount': 0} for a in allowances]
         formset = EmployeeAllowanceFormSetDynamic(queryset=EmployeeAllowance.objects.none(), initial=initial_allowances)
+        doc_formset = EmployeeDocumentFormSet()
         
-    return render(request, 'core/employee_form.html', {'form': form, 'formset': formset})
+    return render(request, 'core/employee_form.html', {
+        'form': form, 
+        'formset': formset,
+        'doc_formset': doc_formset
+    })
 
 @login_required
 def employee_detail(request, pk):
@@ -404,11 +411,13 @@ def employee_edit(request, pk):
     if request.method == 'POST':
         form = EmployeeForm(request.POST, instance=employee)
         formset = EmployeeAllowanceFormSetFixed(request.POST, instance=employee)
-        if form.is_valid() and formset.is_valid():
+        doc_formset = EmployeeDocumentFormSet(request.POST, request.FILES, instance=employee)
+        if form.is_valid() and formset.is_valid() and doc_formset.is_valid():
             try:
                 with transaction.atomic():
                     form.save()
                     formset.save()
+                    doc_formset.save()
                     messages.success(request, f"Employee {employee.full_name} updated locally.")
                     return redirect('employee_list')
             except Exception as e:
@@ -417,12 +426,18 @@ def employee_edit(request, pk):
         else:
              print("Edit Form Errors:", form.errors)
              print("Edit Formset Errors:", formset.errors)
+             print("Doc Formset Errors:", doc_formset.errors)
              messages.error(request, "Please correct the errors below.")
     else:
         form = EmployeeForm(instance=employee)
         formset = EmployeeAllowanceFormSetFixed(instance=employee)
+        doc_formset = EmployeeDocumentFormSet(instance=employee)
         
-    return render(request, 'core/employee_form.html', {'form': form, 'formset': formset})
+    return render(request, 'core/employee_form.html', {
+        'form': form, 
+        'formset': formset,
+        'doc_formset': doc_formset
+    })
 
 @login_required
 def employee_delete(request, pk):
@@ -1838,6 +1853,135 @@ def export_attendance_csv(request):
             att.check_out_time,
             att.notes
         ])
+
+    return response
+
+@hr_required
+def export_monthly_attendance_csv(request):
+    """
+    Exports monthly attendance data for selected employees in CSV format.
+    Supports single employee from summary page or multiple from monthly report.
+    """
+    month = int(request.GET.get('month') or request.POST.get('month') or datetime.date.today().month)
+    year = int(request.GET.get('year') or request.POST.get('year') or datetime.date.today().year)
+    
+    # Get employee IDs from POST (batch) or GET (single)
+    employee_ids = request.POST.getlist('employee_ids') or request.GET.getlist('employee_ids')
+    
+    # Fallback for single employee from summary page
+    if not employee_ids and (request.GET.get('employee') or request.POST.get('employee')):
+        employee_ids = [request.GET.get('employee') or request.POST.get('employee')]
+
+    if not employee_ids:
+        messages.error(request, "Please select at least one employee to export.")
+        return redirect('monthly_salary_report')
+
+    _, num_days = calendar.monthrange(year, month)
+    start_date = datetime.date(year, month, 1)
+    end_date = datetime.date(year, month, num_days)
+
+    employees = Employee.objects.filter(id__in=employee_ids)
+    
+    response = HttpResponse(content_type='text/csv')
+    month_name = calendar.month_name[month]
+    
+    if employees.count() == 1:
+        emp_name = employees.first().full_name.replace(' ', '_')
+        filename = f"attendance_{emp_name}_{month_name}_{year}.csv"
+    else:
+        filename = f"attendance_batch_{month_name}_{year}.csv"
+        
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+    writer = csv.writer(response)
+    writer.writerow(['Employee Code', 'Employee Name', 'Date', 'Day', 'Check In', 'Check Out', 'Working Hours', 'Overtime', 'Status', 'Notes'])
+
+    for emp in employees:
+        att_records = Attendance.objects.filter(employee=emp, date__range=[start_date, end_date])
+        att_map = {att.date: att for att in att_records}
+        
+        holidays_qs = Holiday.objects.filter(date__range=[start_date, end_date])
+        holiday_map = {h.date: h.description for h in holidays_qs}
+        
+        leaves = Leave.objects.filter(employee=emp, start_date__lte=end_date, end_date__gte=start_date, status='Approved')
+        leave_map = {}
+        for l in leaves:
+            curr = l.start_date
+            while curr <= l.end_date:
+                if start_date <= curr <= end_date:
+                    leave_map[curr] = l.leave_type
+                curr += datetime.timedelta(days=1)
+
+        for day in range(1, num_days + 1):
+            curr_date = datetime.date(year, month, day)
+            record = att_map.get(curr_date)
+            
+            check_in = "Absent"
+            check_out = "Absent"
+            working_hours = "-"
+            overtime = "-"
+            status = "Absent"
+            notes = ""
+
+            if record:
+                status = "Present"
+                if curr_date in holiday_map:
+                    status = f"Present (Holiday)"
+                
+                check_in = record.check_in_time.strftime('%H:%M') if record.check_in_time else "Not Done"
+                check_out = record.check_out_time.strftime('%H:%M') if record.check_out_time else "Not Done"
+                notes = record.notes or ""
+
+                if record.check_in_time and record.check_out_time:
+                    dt_in = datetime.datetime.combine(curr_date, record.check_in_time)
+                    dt_out = datetime.datetime.combine(curr_date, record.check_out_time)
+                    if dt_out < dt_in: dt_out += datetime.timedelta(days=1)
+                    duration = (dt_out - dt_in).total_seconds()
+                    
+                    deduction = 3600 if not record.no_break else 0
+                    seconds = duration - deduction
+                    if seconds < 0: seconds = 0
+                    
+                    def fmt_secs(s):
+                        h = int(s // 3600)
+                        m = int((s % 3600) // 60)
+                        return f"{h:02d}:{m:02d}"
+
+                    if curr_date in holiday_map:
+                        working_hours = "08:00"
+                        overtime = fmt_secs(seconds)
+                    else:
+                        if seconds > 28800:
+                            working_hours = "08:00"
+                            overtime = fmt_secs(seconds - 28800)
+                        else:
+                            working_hours = fmt_secs(seconds)
+                            overtime = "00:00"
+            else:
+                if curr_date in leave_map:
+                    status = f"On Leave ({leave_map[curr_date]})"
+                    if leave_map[curr_date] == 'Paid':
+                        working_hours = "08:00 (Leave)"
+                elif curr_date in holiday_map:
+                    status = f"Holiday ({holiday_map[curr_date]})"
+                    working_hours = "08:00"
+                    check_in = "Holiday"
+                    check_out = "Holiday"
+
+            writer.writerow([
+                emp.employee_code,
+                emp.full_name,
+                curr_date.strftime('%Y-%m-%d'),
+                curr_date.strftime('%A'),
+                check_in,
+                check_out,
+                working_hours,
+                overtime,
+                status,
+                notes
+            ])
+        # Add an empty row between employees for readability
+        writer.writerow([])
 
     return response
 

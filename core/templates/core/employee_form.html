@@ -10,7 +10,7 @@
 {% endblock %}
 
 {% block dashboard_content %}
-<form method="post" class="card">
+<form method="post" class="card" enctype="multipart/form-data">
     {% csrf_token %}
 
     <h3>Basic Details</h3>
@@ -74,6 +74,241 @@
         {% endif %}
         {% endfor %}
     </div>
+
+    <hr>
+    <h3>Documents</h3>
+    <p class="text-secondary" style="font-size: 0.9em;">Attach files like ID proofs, photos, certificates (PDF or
+        Images).</p>
+
+    {{ doc_formset.management_form }}
+    <style>
+        /* Hide Django Default ClearableFileInput text */
+        .file-input-container {
+            font-size: 0.9em;
+        }
+
+        .file-input-container br {
+            display: none;
+        }
+
+        .file-input-container input[type="checkbox"] {
+            display: none;
+        }
+
+        /* Target "Currently" text and links */
+        .file-input-container {
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* We'll use a safer way to hide the default text - by wrapping it or styling it out if possible, 
+           but since Django generates it as raw text, we can use a trick or just accept it and put our preview on top. 
+           Actually, the best way in Django is to override the template for the widget, but we can use CSS to hide 
+           everything that isn't the input itself inside the container. */
+        .file-input-container {
+            overflow: hidden;
+            max-width: 100%;
+        }
+    </style>
+
+    <div id="document-formset-container" style="display: flex; flex-direction: column; gap: 1rem;">
+        {% for form in doc_formset %}
+        <div class="document-row card-sub"
+            style="padding: 1.25rem; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px;">
+            {{ form.id }}
+
+            {% if form.instance.pk and form.instance.file %}
+            <div class="existing-file-preview"
+                style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; padding: 0.5rem; background: rgba(255,255,255,0.03); border-radius: 8px;">
+                <div
+                    style="width: 80px; height: 80px; flex-shrink: 0; background: #222; border-radius: 6px; overflow: hidden; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,0.1);">
+                    {% with fname=form.instance.file.name|lower %}
+                    {% if '.jpg' in fname or '.jpeg' in fname or '.png' in fname or '.gif' in fname %}
+                    <img src="{{ form.instance.file.url }}"
+                        style="width: 100%; height: 100%; object-fit: cover; cursor: pointer;"
+                        onclick="window.open('{{ form.instance.file.url }}', '_blank')">
+                    {% elif '.pdf' in fname %}
+                    <i class="fas fa-file-pdf text-danger fa-3x" style="cursor: pointer;"
+                        onclick="window.open('{{ form.instance.file.url }}', '_blank')"></i>
+                    {% else %}
+                    <i class="fas fa-file text-secondary fa-3x"></i>
+                    {% endif %}
+                    {% endwith %}
+                </div>
+                <div style="flex-grow: 1; min-width: 0;">
+                    <div class="small fw-bold text-info" style="margin-bottom: 0.25rem;">Current File</div>
+                    <div class="small text-truncate" style="color: #ccc;">{{ form.instance.file.name }}</div>
+                    <a href="{{ form.instance.file.url }}" target="_blank"
+                        class="btn btn-sm btn-link p-0 text-decoration-none small">View Full</a>
+                </div>
+            </div>
+            {% endif %}
+
+            <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end;">
+                <div style="flex: 1 1 300px;">
+                    <label class="small text-secondary mb-1">
+                        {% if form.instance.pk %}Change File{% else %}Choose File{% endif %}
+                    </label>
+                    <div class="file-input-container">
+                        {{ form.file }}
+                        <div class="instant-preview mt-2"
+                            style="display: none; border: 1px dashed rgba(255,255,255,0.2); padding: 8px; border-radius: 6px; background: rgba(255,255,255,0.02);">
+                            <div class="preview-content" style="display: flex; align-items: center; gap: 10px;">
+                                <img class="preview-img" style="max-height: 40px; border-radius: 4px; display: none;">
+                                <i class="preview-icon fas fa-file-pdf fa-2x text-danger" style="display: none;"></i>
+                                <i class="preview-icon-generic fas fa-file fa-2x text-secondary"
+                                    style="display: none;"></i>
+                                <span class="preview-filename small text-truncate"
+                                    style="max-width: 180px; color: #aaa;"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div style="flex: 1 1 300px;">
+                    <label class="small text-secondary mb-1">Description</label>
+                    {{ form.description }}
+                </div>
+                {% if doc_formset.can_delete %}
+                <div style="flex: 0 0 auto;">
+                    <label class="small text-secondary mb-1" style="display: block;">Delete?</label>
+                    {{ form.DELETE }}
+                </div>
+                {% endif %}
+            </div>
+            {% if form.errors %}
+            <div class="text-danger small mt-2">
+                {{ form.errors }}
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Empty form for cloning -->
+    <div id="empty-document-form" style="display: none;">
+        <div class="document-row card-sub"
+            style="padding: 1rem; background: rgba(255,255,255,0.05); border-radius: 8px; margin-top: 1rem;">
+            {{ doc_formset.empty_form.id }}
+            <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end;">
+                <div style="flex: 1 1 300px;">
+                    <label>{{ doc_formset.empty_form.file.label }}</label>
+                    <div class="file-input-container">
+                        {{ doc_formset.empty_form.file }}
+                        <div class="instant-preview mt-2"
+                            style="display: none; border: 1px dashed #ccc; padding: 5px; border-radius: 4px; background: rgba(0,0,0,0.02);">
+                            <div class="preview-content" style="display: flex; align-items: center; gap: 10px;">
+                                <img class="preview-img" style="max-height: 50px; border-radius: 4px; display: none;">
+                                <i class="preview-icon fas fa-file-pdf fa-2x text-danger" style="display: none;"></i>
+                                <i class="preview-icon-generic fas fa-file fa-2x text-secondary"
+                                    style="display: none;"></i>
+                                <span class="preview-filename small text-truncate" style="max-width: 200px;"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div style="flex: 1 1 300px;">
+                    <label>{{ doc_formset.empty_form.description.label }}</label>
+                    {{ doc_formset.empty_form.description }}
+                </div>
+                <div style="flex: 0 0 auto;">
+                    <button type="button" class="btn btn-outline-danger btn-sm remove-doc-btn">Remove</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-3">
+        <button type="button" id="add-more-docs" class="btn btn-outline-info btn-sm">
+            <i class="fas fa-plus"></i> Add Another Document
+        </button>
+    </div>
+
+    <script>
+
+        // Instant Preview Logic
+        document.addEventListener('change', function (e) {
+            if (e.target.type === 'file' && e.target.name.includes('documents')) {
+                const file = e.target.files[0];
+                const container = e.target.closest('.file-input-container');
+                if (!container) return;
+                const previewDiv = container.querySelector('.instant-preview');
+                const img = previewDiv.querySelector('.preview-img');
+                const pdfIcon = previewDiv.querySelector('.preview-icon');
+                const genIcon = previewDiv.querySelector('.preview-icon-generic');
+                const filename = previewDiv.querySelector('.preview-filename');
+
+                if (file) {
+                    previewDiv.style.display = 'block';
+                    filename.textContent = file.name;
+
+                    // Reset previews
+                    img.style.display = 'none';
+                    pdfIcon.style.display = 'none';
+                    genIcon.style.display = 'none';
+
+                    if (file.type.startsWith('image/')) {
+                        const reader = new FileReader();
+                        reader.onload = function (event) {
+                            img.src = event.target.result;
+                            img.style.display = 'block';
+                        };
+                        reader.readAsDataURL(file);
+                    } else if (file.type === 'application/pdf') {
+                        pdfIcon.style.display = 'block';
+                    } else {
+                        genIcon.style.display = 'block';
+                    }
+                } else {
+                    previewDiv.style.display = 'none';
+                }
+            }
+        });
+
+        // Add More Documents Logic
+        document.getElementById('add-more-docs').addEventListener('click', function () {
+            const container = document.getElementById('document-formset-container');
+            const prefix = '{{ doc_formset.prefix }}';
+            const totalFormsField = document.getElementById(`id_${prefix}-TOTAL_FORMS`);
+            const currentFormCount = parseInt(totalFormsField.value);
+            const emptyFormHtml = document.getElementById('empty-document-form').innerHTML;
+
+            const newFormHtml = emptyFormHtml.replace(/__prefix__/g, currentFormCount);
+            const newForm = document.createElement('div');
+            newForm.innerHTML = newFormHtml;
+
+            container.appendChild(newForm.firstElementChild);
+            totalFormsField.value = currentFormCount + 1;
+        });
+
+        // Remove Document (for newly added ones)
+        document.addEventListener('click', function (e) {
+            if (e.target.classList.contains('remove-doc-btn')) {
+                const row = e.target.closest('.document-row');
+                row.remove();
+
+                const prefix = '{{ doc_formset.prefix }}';
+                const totalFormsField = document.getElementById(`id_${prefix}-TOTAL_FORMS`);
+                const forms = document.querySelectorAll('#document-formset-container .document-row');
+                totalFormsField.value = forms.length;
+
+                // Re-index remaining forms without losing data
+                forms.forEach((form, index) => {
+                    const rowPrefix = `${prefix}-${index}-`;
+                    // Use a more specific regex to avoid over-matching
+                    const nameRegex = new RegExp(`${prefix}-\\d+-`, 'g');
+                    form.querySelectorAll('input, select, textarea, label').forEach(el => {
+                        if (el.name) el.name = el.name.replace(nameRegex, rowPrefix);
+                        if (el.id) {
+                            el.id = el.id.replace(nameRegex, rowPrefix);
+                            // Also update for links to the ID
+                            const label = form.querySelector(`label[for="${el.id.replace(rowPrefix, '')}"]`);
+                        }
+                        if (el.getAttribute('for')) el.setAttribute('for', el.getAttribute('for').replace(nameRegex, rowPrefix));
+                    });
+                });
+            }
+        });
+    </script>
 
     <div class="form-actions" style="margin-top: 2rem;">
         <button type="submit" class="btn btn-primary">Save Employee</button>

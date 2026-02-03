@@ -1,5 +1,5 @@
 from django import forms
-from .models import Employee, Attendance, Department, Designation, Allowance, AttendanceDevice, EmployeeAllowance, HRProfile, Holiday, Leave, SalaryAdvance, LeaveType
+from .models import Employee, Attendance, Department, Designation, Allowance, AttendanceDevice, EmployeeAllowance, HRProfile, Holiday, Leave, SalaryAdvance, LeaveType, EmployeeDocument
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
 from django.core.validators import MinLengthValidator, MinValueValidator, RegexValidator
@@ -157,6 +157,20 @@ EmployeeAllowanceFormSet = inlineformset_factory(
     Employee, 
     EmployeeAllowance, 
     form=EmployeeAllowanceForm,
+    extra=1,
+    can_delete=True
+)
+
+
+class EmployeeDocumentForm(forms.ModelForm):
+    class Meta:
+        model = EmployeeDocument
+        fields = ['file', 'description']
+
+EmployeeDocumentFormSet = inlineformset_factory(
+    Employee,
+    EmployeeDocument,
+    form=EmployeeDocumentForm,
     extra=1,
     can_delete=True
 )
