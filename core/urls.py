@@ -74,5 +74,6 @@ urlpatterns = [
     path('salary/monthly-report/', views.monthly_salary_report, name='monthly_salary_report'),
     path('salary/monthly-report/export/', views.export_monthly_salary_report, name='export_monthly_salary_report'),
     path('salary/toggle-status/', views.toggle_salary_status, name='toggle_salary_status'),
+    path('salary/update-manual-adjustment/', views.update_manual_adjustment, name='update_manual_adjustment'),
 ]
 

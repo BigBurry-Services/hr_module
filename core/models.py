@@ -242,3 +242,17 @@ class SalaryPayment(models.Model):
 
     def __str__(self):
         return f"Payment: {self.employee} - {self.month}/{self.year}"
+
+class ManualSalaryAdjustment(models.Model):
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
+    month = models.IntegerField()
+    year = models.IntegerField()
+    esi_override = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    pf_override = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('employee', 'month', 'year')
+
+    def __str__(self):
+        return f"{self.employee.full_name} - {self.month}/{self.year} Adjustment"

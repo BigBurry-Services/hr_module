@@ -211,8 +211,24 @@
                             <td class="num-cell">{{ row.overtime_hours }}</td>
                             <td class="num-cell">{{ row.overtime_amount }}</td>
                             <td class="num-cell">{{ row.salary_advance }}</td>
-                            <td class="num-cell">{{ row.esic }}</td>
-                            <td class="num-cell">{{ row.pf }}</td>
+                            <td class="num-cell">
+                                {% if not row.is_paid %}
+                                <input type="number" step="0.01" class="form-control form-control-xs manual-adj-input"
+                                    data-emp-id="{{ row.emp_id }}" data-field="esi" value="{{ row.esic }}"
+                                    style="width: 70px; display: inline-block;">
+                                {% else %}
+                                {{ row.esic }}
+                                {% endif %}
+                            </td>
+                            <td class="num-cell">
+                                {% if not row.is_paid %}
+                                <input type="number" step="0.01" class="form-control form-control-xs manual-adj-input"
+                                    data-emp-id="{{ row.emp_id }}" data-field="pf" value="{{ row.pf }}"
+                                    style="width: 70px; display: inline-block;">
+                                {% else %}
+                                {{ row.pf }}
+                                {% endif %}
+                            </td>
                             <td class="num-cell">{{ row.leaves }}</td>
                             <td class="num-cell">{{ row.leave_cut_amount }}</td>
                             <td class="num-cell">{{ row.total_salary }}</td>
@@ -321,6 +337,55 @@
                 });
             });
         }
+
+        // Manual Adjustment AJAX
+        const adjInputs = document.querySelectorAll('.manual-adj-input');
+        adjInputs.forEach(input => {
+            input.addEventListener('change', function () {
+                const empId = this.dataset.empId;
+                const field = this.dataset.field;
+                const value = this.value;
+                const self = this;
+
+                // Add visual feedback (loading)
+                self.style.opacity = '0.5';
+
+                const formData = new FormData();
+                formData.append('employee_id', empId);
+                formData.append('month', '{{ selected_month }}');
+                formData.append('year', '{{ selected_year }}');
+                formData.append('field', field);
+                formData.append('value', value);
+                formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+                fetch("{% url 'update_manual_adjustment' %}", {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        self.style.opacity = '1';
+                        if (data.status === 'success') {
+                            self.classList.add('is-valid');
+                            setTimeout(() => self.classList.remove('is-valid'), 2000);
+                            // Optional: Refresh page to update totals, or update totals via JS
+                            // For now, simple reload or inform user
+                            console.log('Saved adjustment for emp ' + empId);
+                        } else {
+                            alert('Error: ' + data.message);
+                            self.classList.add('is-invalid');
+                        }
+                    })
+                    .catch(error => {
+                        self.style.opacity = '1';
+                        console.error('Error:', error);
+                        alert('An error occurred while saving.');
+                    });
+            });
+        });
     });
 </script>
 {% endblock %}

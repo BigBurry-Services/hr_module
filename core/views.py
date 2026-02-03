@@ -8,7 +8,7 @@ from django.contrib.auth.decorators import login_required
 import datetime
 import calendar
 import csv
-from .models import Employee, Attendance, Department, Designation, Allowance, EmployeeAllowance, HRProfile, Holiday, Leave, SalaryAdvance, AttendanceDevice, LeaveType, AttendanceLock, SalaryPayment
+from .models import Employee, Attendance, Department, Designation, Allowance, EmployeeAllowance, HRProfile, Holiday, Leave, SalaryAdvance, AttendanceDevice, LeaveType, AttendanceLock, SalaryPayment, ManualSalaryAdjustment
 from django.contrib.auth.models import User
 from django.db import transaction
 from .forms import EmployeeForm, RegistrationForm, DepartmentForm, DesignationForm, AllowanceForm, EmployeeAllowanceForm, EmployeeAllowanceFormSet, AttendanceForm, HRProfileForm, HolidayForm, LeaveForm, SalaryAdvanceForm, AttendanceDeviceForm, LeaveTypeForm, SalarySummaryForm, EmployeeDocumentFormSet
@@ -816,6 +816,7 @@ def summary(request):
         ).exists()
 
         # Check Salary Payment Lock
+        is_salary_paid = False
         salary_payment = SalaryPayment.objects.filter(employee=employee, month=month, year=year).first()
         if salary_payment and salary_payment.is_paid:
             is_salary_paid = True
@@ -985,96 +986,60 @@ def summary(request):
 
             full_attendance_list.append(day_data)
 
-        # 3. Calculate Salary Components
+        # 3. Calculate Salary Components using Central Function
+        calc_data = calculate_salary_for_month(employee, month, year)
         
-        # Calculate totals
-        total_grand_seconds = total_regular_seconds + total_overtime_seconds
-        total_minutes_worked = int(total_grand_seconds / 60)
+        basic_salary = calc_data['basic'] or Decimal('0.00')
+        daily_wage = basic_salary / 30 if basic_salary > 0 else Decimal('0.00')
+        per_minute_wage = (daily_wage / Decimal(480)).quantize(Decimal("0.01")) if basic_salary > 0 else Decimal('0.00')
         
-        overtime_hours = Decimal(total_overtime_seconds) / Decimal(3600)
-        
-        # Basic Rates
-        basic_salary = 0
-        daily_wage = 0
-        per_minute_wage = 0
-        
-        if employee:
-            basic_salary = employee.basic_salary
-            daily_wage = basic_salary / 30 # Standard 30 days
-            # Per Minute = Daily Wage / 8 hours (480 mins)
-            # This is the standard rate derived from daily wage for an 8 hour shift
-            # Rounding to 2 decimal places to match User's manual calculation (WYSIWYG)
-            per_minute_wage = (daily_wage / Decimal(480)).quantize(Decimal("0.01"))
+        earned_basic = calc_data['basic_regular'] if 'basic_regular' in calc_data else calc_data['earned_basic']
+        overtime_amount = calc_data['overtime_amount']
+        gross_salary = calc_data['total_salary']
+        pf = calc_data['pf']
+        esi = calc_data['esic']
+        employer_pf = calc_data['employer_pf']
+        employer_esi = calc_data['employer_esi']
+        pf_eligible = basic_salary <= 15000
+        esi_eligible = basic_salary <= 21000
 
-        # Earned Basic = Total Minutes * Minute Rate
-        earned_basic = Decimal(total_minutes_worked) * per_minute_wage
+        # --- SUMMARY FORM OVERRIDES (Top Priority & Persistence) ---
+        manual_pf = form.cleaned_data.get('manual_pf')
+        manual_esi = form.cleaned_data.get('manual_esi')
+
+        # Persist to ManualSalaryAdjustment if it's a POST request (Manual Save)
+        if request.method == 'POST' and not is_salary_paid:
+            adjustment, created = ManualSalaryAdjustment.objects.get_or_create(
+                employee=employee, month=month, year=year
+            )
+            adjustment.pf_override = manual_pf
+            adjustment.esi_override = manual_esi
+            adjustment.save()
+
+        if manual_pf is not None:
+             pf = manual_pf
+             employer_pf = manual_pf # 1:1 for manual
+             pf_eligible = True
+             
+        if manual_esi is not None:
+             esi = manual_esi
+             employer_esi = manual_esi * (Decimal('3.25') / Decimal('0.75')) # 4.33 ratio
+             esi_eligible = True
+
+        # --- SNAPSHOT OVERRIDE (If Paid) ---
+        if is_salary_paid and salary_payment:
+             pf = salary_payment.pf_deduction
+             esi = salary_payment.esi_deduction
+             employer_pf = salary_payment.employer_pf
+             employer_esi = salary_payment.employer_esi
+             form.fields['manual_pf'].initial = pf
+             form.fields['manual_esi'].initial = esi
+
+        # Salary Advance
+        advances = SalaryAdvance.objects.filter(employee=employee, date__range=[start_date, end_date])
+        total_advance = advances.aggregate(Sum('amount'))['amount__sum'] or Decimal('0.00')
         
-        # OT Amount
-        # Using the same minute rate for OT (1x) or specific Logic?
-        # Code previously used: (daily_wage / 8) * overtime_hours
-        # (daily_wage / 8) is exactly per_hour_wage. per_hour * hours = amount.
-        # This matches calculated earned_basic logic if OT is paid at same rate.
-        # However, typically Basic is for Regular hours and OT is separate.
-        # The user requested "basic salary (earned)... must match total minutes worked * per minute charge".
-        # This implies "Earned Basic" now effectively captures ALL work pay?
-        # Wait, if we put ALL pay into Earned Basic, then Overtime Amount should be 0 or separate?
-        # Usually:
-        # Earned Basic = Regular Minutes * Rate
-        # Overtime Pay = OT Minutes * Rate
-        # Total = Earned Basic + OT Pay
-        # "Total Minutes Worked" usually implies Regular + OT.
-        # If user says "basic salary... match total minutes * charge", they might mean the SUM.
-        # BUT the table has separate row for "Overtime Amount".
-        # If I put everything in Basic, OT Amount row becomes redundant or double counting?
-        # Let's check the previous code.
-        # loops calculated total_regular_seconds and total_overtime_seconds.
-        # User REQ: "basic salary (earned) ... match total minutes worked * per minute charge"
-        # "Total Minutes Worked" in the summary table (line 328) is "total_minutes_worked" variable.
-        # In my logic above, `total_minutes_worked` = reg + ot.
-        # So I will set `earned_basic` = `total_minutes_worked` * `per_minute_wage`.
-        # AND I will set `overtime_amount` to 0 ? Or is OT extra?
-        # The UI shows "Basic Salary (Earned)" AND "Overtime Amount".
-        # If I include OT in Basic, I should probably zero out OT Amount to avoid double pay, 
-        # OR the user considers "Basic Salary" to be the line item for all time-based pay.
-        # CHECK: The user said "basic salary... match total minutes...".
-        # I will assume ONLY Basic Salary line changes its logic to cover everything, 
-        # OR I separate them.
-        # Given "match total minutes * per minute", I will make `earned_basic` cover it all.
-        # But wait, there is a "Gross Salary" row = Basic + OT + Allowances.
-        # If I put OT in Basic, Gross is fine.
-        # BUT I should probably set Overtime Amount to 0 to be safe, OR:
-        # Maybe "Total Minutes Worked" in user's mind is just Regular?
-        # Looking at previous code: 
-        # line 1068: 'total_minutes_worked': int(total_grand_seconds / 60) -> This INCLUDES OT.
-        # So User really wants Basic Line = (Reg + OT) * Rate.
-        # I will set Overtime Amount to 0 effectively, or I need to clarify?
-        # "basic salary (earned) ... match total minutes worked * per minute charge"
-        # I will do exactly that.
-        
-        # Overtime Allowance = Overtime Minutes * Rate
-        # User Formula: total overtime hours * 60 * wage per minute
-        overtime_minutes = int(total_overtime_seconds / 60)
-        overtime_amount = Decimal(overtime_minutes) * per_minute_wage 
-        # IF I set this to 0, I should probably hide the row or just show 0.
-        # OR does the user want:
-        # Basic = Regular * Rate
-        # OT = OT * Rate
-        # And "Total Minutes" was just a reference?
-        # The user said "basic salary ... must match total minutes worked * per minute charge".
-        # This is a strong equality constraint. 
-        # I will use the Exact Formula requested.
-        # earned_basic = total_minutes_worked * per_minute_wage
-        # overtime_amount = 0 (since it's included now)
-        
-        # However, to avoid confusion if they expect OT separately:
-        # I will stick to the literal request.
-        
-        # WAIT! If I kill OT amount, I might break "Gross".
-        # Gross = earned + allowances + ot.
-        # If ot is 0, Gross = earned + allowances.
-        # This seems correct for "Total Pay based on Time" being in one line.
-        
-        # Allowances
+        # Allowance List (Needed for Summary UI)
         total_allowances = 0
         allowance_list = []
         if employee:
@@ -1087,70 +1052,8 @@ def summary(request):
                     'amount': amount
                 })
 
-        gross_salary = earned_basic + total_allowances + overtime_amount # overtime_amount is 0
-        
-        # Deductions
-        pf_eligible = basic_salary <= 15000
-        esi_eligible = basic_salary <= 21000
-        
-        # Deductions
-        pf_eligible = basic_salary <= 15000
-        esi_eligible = basic_salary <= 21000
-        
-        # CHECK FOR MANUAL PF
-        manual_pf = form.cleaned_data.get('manual_pf')
-        
-        # PERSISTENCE LOGIC: If form manual_pf is empty, but we have a payment record, use the snapshotted PF
-        if manual_pf is None and salary_payment:
-             pf = salary_payment.pf_deduction
-             pf_eligible = True # Treat as manual override
-             # Inject back into form for UI visibility
-             form.fields['manual_pf'].initial = pf
-        elif manual_pf is not None:
-             pf = manual_pf
-             pf_eligible = True # Force eligible if manually entered
-        elif pf_eligible:
-            pf = earned_basic * Decimal('0.12')
-        else:
-            pf = Decimal('0.00')
-
-        # CHECK FOR MANUAL ESI
-        manual_esi = form.cleaned_data.get('manual_esi')
-        
-        # PERSISTENCE LOGIC: If form manual_esi is empty, but we have a payment record, use the snapshotted ESI
-        if manual_esi is None and salary_payment:
-             esi = salary_payment.esi_deduction
-             esi_eligible = True # Treat as manual override
-             # Inject back into form for UI visibility
-             form.fields['manual_esi'].initial = esi
-        elif manual_esi is not None:
-             esi = manual_esi
-             esi_eligible = True # Force eligible if manually entered
-        elif esi_eligible:
-             esi = gross_salary * Decimal('0.0075')
-        else:
-            esi = Decimal('0.00')
-            
-        # Employer PF Calculation
-        if manual_pf is not None:
-            employer_pf = manual_pf # 1:1 Ratio for Manual Override
-        elif manual_pf is None and salary_payment:
-            employer_pf = salary_payment.employer_pf # Use snapshot
-        elif pf_eligible:
-            employer_pf = earned_basic * Decimal('0.12')
-        else:
-            employer_pf = Decimal('0.00')
-            
-        # Employer ESI Calculation
-        if manual_esi is not None:
-             # Ratio: 3.25 / 0.75 = 4.3333... for Manual Override
-             employer_esi = manual_esi * (Decimal('3.25') / Decimal('0.75'))
-        elif manual_esi is None and salary_payment:
-             employer_esi = salary_payment.employer_esi # Use snapshot
-        elif esi_eligible:
-             employer_esi = earned_basic * Decimal('0.0325') 
-        else:
-            employer_esi = Decimal('0.00')
+        total_deductions = pf + esi + total_advance + (calc_data.get('leave_cut_amount', 0))
+        salary_payable = gross_salary - total_deductions
 
         # Salary Advance
         advances = SalaryAdvance.objects.filter(employee=employee, date__range=[start_date, end_date])
@@ -1161,8 +1064,8 @@ def summary(request):
         # Logic: 
         # Earned Basic = Actual Pay for time worked.
         # Leave Cut = Full Basic - Earned Basic.
-        leave_cut_val = basic_salary - earned_basic
-        if leave_cut_val < 0: leave_cut_val = 0 # Should not happen unless extra pay?
+        leave_cut_amount = basic_salary - earned_basic
+        if leave_cut_amount < 0: leave_cut_amount = 0 # Should not happen unless extra pay?
 
         # For Display on Slip:
         # Gross Salary (Display) = Full Basic + Allowances + Overtime
@@ -1182,7 +1085,7 @@ def summary(request):
         # We will use these new "Display" variables for the context passed to template/PDF.
 
         display_gross_salary = basic_salary + total_allowances + overtime_amount
-        display_total_deductions = pf + esi + total_advance + leave_cut_val
+        display_total_deductions = pf + esi + total_advance + leave_cut_amount
         
         # Re-assign standard variables to use these display values where appropriate, 
         # OR keep 'gross_salary' as 'Earned Gross' for other logic?
@@ -1218,7 +1121,7 @@ def summary(request):
                      'esi_deduction': esi,
                      'employer_pf': employer_pf,
                      'employer_esi': employer_esi,
-                     'leave_deduction': leave_cut_val,
+                     'leave_deduction': leave_cut_amount,
                      'salary_advance': total_advance,
                      'is_paid': True
                  }
@@ -1236,10 +1139,10 @@ def summary(request):
              esi = salary_payment.esi_deduction
              employer_pf = salary_payment.employer_pf
              employer_esi = salary_payment.employer_esi
-             leave_cut_val = salary_payment.leave_deduction
+             leave_cut_amount = salary_payment.leave_deduction
              total_advance = salary_payment.salary_advance
              
-             total_deductions = pf + esi + total_advance + leave_cut_val
+             total_deductions = pf + esi + total_advance + leave_cut_amount
         
         total_pf_contribution = pf + employer_pf
         total_esi_contribution = esi + employer_esi
@@ -1268,10 +1171,17 @@ def summary(request):
              if d['status'] == 'Absent':
                  absent_days_count += 1
         
+        total_pf_contribution = pf + employer_pf
+        total_esi_contribution = esi + employer_esi
+        total_emp_share = pf + esi
+        total_employer_share = employer_pf + employer_esi
+        grand_total_gov_payable = total_emp_share + total_employer_share
+        
         # Prepare Slip Data
         earnings_list_slip = []
-        # CHANGED: Use Full Basic Salary
         earnings_list_slip.append({"name": "Basic Salary", "amount": basic_salary})
+        # If overtime_amount is handled separately in calc_data, show it.
+        # Otherwise, if it's 0 (because it was folded into basic), it shows 0.
         earnings_list_slip.append({"name": "Overtime Allowance", "amount": overtime_amount})
         
         for al in allowance_list:
@@ -1284,9 +1194,8 @@ def summary(request):
         if pf_eligible:
             deductions_list_slip.append({"name": "PF", "amount": pf})
         
-        # CHANGED: Always add Leave Cut if > 0
-        if leave_cut_val > 0:
-            deductions_list_slip.append({"name": "Leave Cut", "amount": leave_cut_val})
+        if leave_cut_amount > 0:
+            deductions_list_slip.append({"name": "Leave Cut", "amount": leave_cut_amount})
             
         slip_rows = []
         max_rows = max(len(earnings_list_slip), len(deductions_list_slip))
@@ -1310,10 +1219,10 @@ def summary(request):
             'total_working_days': total_working_days,
             'total_present_days': present_days_count,
             'total_absent_days': absent_days_count,
-            'total_working_hours': format_seconds(total_regular_seconds),
-            'total_overtime_hours': format_seconds(total_overtime_seconds),
-            'total_minutes_worked': total_minutes_worked,
-            'total_gross_hours': format_seconds(total_grand_seconds), # NEW field
+            'total_working_hours': format_seconds(calc_data['total_regular_seconds']),
+            'total_overtime_hours': format_seconds(calc_data['total_overtime_seconds']),
+            'total_minutes_worked': calc_data['total_minutes_worked'],
+            'total_gross_hours': format_seconds(calc_data['total_grand_seconds']), # NEW field
             
             'basic_salary': basic_salary,
             'earned_basic': earned_basic,
@@ -1343,7 +1252,7 @@ def summary(request):
              'pf_number': employee.pf_number if employee else "-",
              'esi_number': employee.esi_number if employee else "-",
              'leave_cut_days': unpaid_leaves_count,
-             'leave_cut_amount': leave_cut_val,
+             'leave_cut_amount': leave_cut_amount,
              'total_unpaid_leaves': unpaid_leaves_count,
              'total_paid_leaves': paid_leaves_count, # NEW Field
              'slip_rows': slip_rows,
@@ -2463,6 +2372,16 @@ def calculate_salary_for_month(employee, month, year):
     if basic <= 15000: pf = total_earned * Decimal('0.12')
     if basic <= 21000: esi = gross_salary * Decimal('0.0075')
 
+    # Apply Manual Overrides
+    try:
+        adjustment = ManualSalaryAdjustment.objects.get(employee=employee, month=month, year=year)
+        if adjustment.pf_override is not None:
+            pf = adjustment.pf_override
+        if adjustment.esi_override is not None:
+            esi = adjustment.esi_override
+    except ManualSalaryAdjustment.DoesNotExist:
+        pass
+
     advances_total = SalaryAdvance.objects.filter(employee=employee, date__range=[start_date, end_date]).aggregate(sum=Sum('amount'))['sum'] or 0
     total_deductions = pf + esi + advances_total
     
@@ -2484,10 +2403,11 @@ def calculate_salary_for_month(employee, month, year):
     wh_hours = int(working_hours_decimal)
     wh_minutes = int((working_hours_decimal - wh_hours) * 60)
     total_working_hours_str = f"{wh_hours:02d}:{wh_minutes:02d}"
-
+    earned_basic = total_earned
 
     return {
         'basic': basic,
+        'earned_basic': earned_basic,
         'allowances': total_allowances,
         'overtime_hours': overtime_hours_str,
         'overtime_amount': ot_amount,
@@ -2500,14 +2420,20 @@ def calculate_salary_for_month(employee, month, year):
         'total_salary': gross_salary,
         'net_salary': gross_salary - total_deductions,
         'total_deductions': total_deductions,
+        # Raw Time Data
+        'total_minutes_worked': total_minutes_worked,
+        'total_regular_seconds': total_regular_seconds,
+        'total_overtime_seconds': total_overtime_seconds,
+        'total_grand_seconds': total_grand_seconds,
         # Helper fields for saving
         'gross_salary': gross_salary, 
         'salary_payable': gross_salary - total_deductions,
         'pf_deduction': pf,
         'esi_deduction': esi,
-        'employer_pf': pf, # Placeholder - assuming 1:1 if not calc
-        'employer_esi': esi * Decimal('3.25') if esi > 0 else Decimal(0), # 3.25% if ESI applicable
+        'employer_pf': pf if ManualSalaryAdjustment.objects.filter(employee=employee, month=month, year=year, pf_override__isnull=False).exists() else (earned_basic * Decimal('0.12') if basic <= 15000 else Decimal('0.00')),
+        'employer_esi': (esi * (Decimal('3.25') / Decimal('0.75'))) if ManualSalaryAdjustment.objects.filter(employee=employee, month=month, year=year, esi_override__isnull=False).exists() else (gross_salary * Decimal('0.0325') if basic <= 21000 else Decimal('0.00')),
         'leave_deduction': leave_cut_amount,
+        'salary_advance': advances_total,
     }
 
 def get_monthly_report_rows(employees, month, year):
@@ -2515,9 +2441,9 @@ def get_monthly_report_rows(employees, month, year):
     Generates the list of report rows for the Monthly Salary Report.
     Handles Live Calculation + Snapshot Override.
     """
-    # Fetch snapshots
-    paid_payments = SalaryPayment.objects.filter(month=month, year=year, is_paid=True)
-    payment_map = {p.employee_id: p for p in paid_payments}
+    # Fetch snapshots (including unpaid/unlocked ones)
+    all_payments = SalaryPayment.objects.filter(month=month, year=year)
+    payment_map = {p.employee_id: p for p in all_payments}
     
     report_data = []
     
@@ -2527,11 +2453,10 @@ def get_monthly_report_rows(employees, month, year):
         
         # 2. Override with Snapshot if exists (For Money fields)
         payment_snapshot = payment_map.get(emp.id)
-        is_paid = False
+        is_paid = payment_snapshot.is_paid if payment_snapshot else False
         
-        if payment_snapshot:
-            is_paid = True
-            # Override money fields
+        if is_paid:
+            # Override money fields from snapshot ONLY if paid
             data['pf'] = payment_snapshot.pf_deduction
             data['esic'] = payment_snapshot.esi_deduction
             data['leave_cut_amount'] = payment_snapshot.leave_deduction
@@ -2877,3 +2802,43 @@ def update_single_attendance(request, employee_id):
              return JsonResponse({'status': 'success', 'message': 'Saved successfully'})
         return redirect(f"{reverse('attendance_mark')}?date={date_str}")
     return redirect('attendance_mark')
+
+@hr_required
+def update_manual_adjustment(request):
+    if request.method == 'POST':
+        employee_id = request.POST.get('employee_id')
+        month = request.POST.get('month')
+        year = request.POST.get('year')
+        field = request.POST.get('field')  # 'esi' or 'pf'
+        value = request.POST.get('value')
+        
+        if not all([employee_id, month, year, field]):
+             return JsonResponse({'status': 'error', 'message': 'Missing required fields.'})
+             
+        try:
+            employee = get_object_or_404(Employee, pk=employee_id)
+            month = int(month)
+            year = int(year)
+            
+            # Check if month is paid
+            is_paid = SalaryPayment.objects.filter(employee=employee, month=month, year=year, is_paid=True).exists()
+            if is_paid:
+                return JsonResponse({'status': 'error', 'message': 'Cannot edit paid salary.'})
+
+            adjustment, created = ManualSalaryAdjustment.objects.get_or_create(
+                employee=employee, month=month, year=year
+            )
+            
+            # Allow clearing values by passing empty string
+            decimal_value = Decimal(value) if (value is not None and value.strip() != '') else None
+            
+            if field == 'esi':
+                adjustment.esi_override = decimal_value
+            elif field == 'pf':
+                adjustment.pf_override = decimal_value
+            adjustment.save()
+            return JsonResponse({'status': 'success'})
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)})
+            
+    return JsonResponse({'status': 'error', 'message': 'Invalid request method.'})
