@@ -137,12 +137,12 @@
             <div class="card" style="width: 15rem;">
                 <div
                     style="height: 150px; overflow: hidden; background: #f0f0f0; display: flex; align-items: center; justify-content: center;">
-                    {% if doc.file.name|lower|slice:"-4:" == ".jpg" or doc.file.name|lower|slice:"-5:" == ".jpeg" or
-                    doc.file.name|lower|slice:"-4:" == ".png" or doc.file.name|lower|slice:"-4:" == ".gif" %}
+                    {% with fname=doc.file.name|lower %}
+                    {% if '.jpg' in fname or '.jpeg' in fname or '.png' in fname or '.gif' in fname %}
                     <img src="{{ doc.file.url }}"
                         style="max-width: 100%; max-height: 100%; object-fit: cover; cursor: pointer;"
                         onclick="window.open('{{ doc.file.url }}', '_blank')">
-                    {% elif doc.file.name|lower|slice:"-4:" == ".pdf" %}
+                    {% elif '.pdf' in fname %}
                     <div style="text-align: center; cursor: pointer;"
                         onclick="window.open('{{ doc.file.url }}', '_blank')">
                         <i class="fas fa-file-pdf fa-4x text-danger"></i>
@@ -155,6 +155,7 @@
                         <br><small>{{ doc.file.name }}</small>
                     </div>
                     {% endif %}
+                    {% endwith %}
                 </div>
                 <div class="card-body p-2">
                     <p class="card-text small mb-1"><strong>{{ doc.description|default:"No description" }}</strong></p>
