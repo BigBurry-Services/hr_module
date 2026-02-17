@@ -61,9 +61,9 @@ class DeviceSyncService:
                 print(f"--- Fetched {len(logs)} logs from {device.name} ---")
 
                 for log in logs:
-                    print(f"Log: {log}")
                     # log.timestamp is a datetime object
                     if log.timestamp.date() == target_date:
+                        print(f"Processing log: {log} for target date {target_date}")
                         user_id = str(log.user_id)
                         if user_id not in user_punches:
                             user_punches[user_id] = []
@@ -72,6 +72,8 @@ class DeviceSyncService:
                             'time': log.timestamp.time(),
                             'status': log.status
                         })
+                    else:
+                         print(f"Skipping log: {log} - Date {log.timestamp.date()} != Target {target_date}")
                 
                 conn.disconnect()
             except Exception as e:
@@ -86,6 +88,7 @@ class DeviceSyncService:
         return results
 
     def process_punches(self, user_punches, target_date):
+        print(f"Processing punches for {len(user_punches)} users")
         count = 0
         for user_id, punches in user_punches.items():
             try:
@@ -93,11 +96,13 @@ class DeviceSyncService:
                 try:
                     employee = Employee.objects.get(employee_code=user_id)
                 except Employee.DoesNotExist:
+                    print(f"Employee not found for user_id: {user_id}")
                     # Try removing leading zeros if simple match fails
                     if user_id.startswith('0'):
                          try:
                             employee = Employee.objects.get(employee_code=int(user_id))
                          except (Employee.DoesNotExist, ValueError):
+                            print(f"Employee not found for user_id (int stripped): {user_id}")
                             continue
                     else:
                         continue
