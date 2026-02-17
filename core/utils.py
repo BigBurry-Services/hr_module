@@ -64,6 +64,7 @@ class DeviceSyncService:
                     # log.timestamp is a datetime object
                     if log.timestamp.date() == target_date:
                         print(f"Processing log: {log} for target date {target_date}")
+                        print(f"Raw user_id: {repr(log.user_id)}")
                         user_id = str(log.user_id)
                         if user_id not in user_punches:
                             user_punches[user_id] = []
@@ -91,23 +92,27 @@ class DeviceSyncService:
         print(f"Processing punches for {len(user_punches)} users")
         count = 0
         for user_id, punches in user_punches.items():
+            print(f"Processing user_id: {repr(user_id)} with {len(punches)} punches")
             try:
                 # Find Employee by employee_code
                 try:
                     employee = Employee.objects.get(employee_code=user_id)
+                    print(f"Found match: {employee}")
                 except Employee.DoesNotExist:
-                    print(f"Employee not found for user_id: {user_id}")
+                    print(f"Employee not found for user_id: {repr(user_id)}")
                     # Try removing leading zeros if simple match fails
                     if user_id.startswith('0'):
                          try:
                             employee = Employee.objects.get(employee_code=int(user_id))
+                            print(f"Found match (stripped): {employee}")
                          except (Employee.DoesNotExist, ValueError):
-                            print(f"Employee not found for user_id (int stripped): {user_id}")
+                            print(f"Employee not found for user_id (int stripped): {repr(user_id)}")
                             continue
                     else:
                         continue
 
                 if not punches:
+                    print("No punches for user")
                     continue
 
                 # Sort punches by time
@@ -137,6 +142,7 @@ class DeviceSyncService:
                             last_valid_punch_time = current_time
                 
                 punches = filtered_punches
+                print(f"Filtered punches: {punches}")
                 
                 # Logic: 
                 # 1. Try to assume Status 1 is Check-In, Status 15 is Check-Out
@@ -164,6 +170,7 @@ class DeviceSyncService:
                 # Check if manual override exists
                 existing_att = Attendance.objects.filter(employee=employee, date=target_date).first()
                 if existing_att and existing_att.is_manual:
+                    print(f"Skipping manual record for {employee}")
                     # Skip sync update for manual records
                     continue
                 
@@ -174,9 +181,11 @@ class DeviceSyncService:
                     year=target_date.year, 
                     is_locked=True
                 ).exists():
+                    print(f"Skipping locked record for {employee}")
                     continue
 
                 # Create or Update Attendance
+                print(f"Saving attendance for {employee}: In={check_in}, Out={check_out}")
                 obj, created = Attendance.objects.update_or_create(
                     employee=employee,
                     date=target_date,
@@ -188,12 +197,15 @@ class DeviceSyncService:
                 )
                 if created:
                     results['created_count'] += 1
+                    print("Created new record")
                 else:
                     results['updated_count'] += 1
+                    print("Updated existing record")
                 count += 1
 
             except Exception as e:
                 logger.error(f"Error processing user {user_id}: {e}")
+                print(f"EXCEPTION for {user_id}: {e}")
                 continue
         
         return count
