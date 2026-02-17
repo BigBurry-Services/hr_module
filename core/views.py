@@ -1279,7 +1279,7 @@ def summary(request):
             title_style = styles["Heading1"]
             title_style.alignment = 1 # Center
             elements.append(Paragraph(f"Salary Slip - {summary_data['month']}", title_style))
-            elements.append(Paragraph("ASHIQ ENTERPRISES", styles["Heading2"])) # Assuming company name
+            elements.append(Paragraph("AMMACHIES", styles["Heading2"])) # Assuming company name
             elements.append(Spacer(1, 0.2*inch))
             
             # 1. Employee Details Table
