@@ -58,8 +58,10 @@ class DeviceSyncService:
                 results['devices_connected'] += 1
 
                 logs = conn.get_attendance()
-                
+                print(f"--- Fetched {len(logs)} logs from {device.name} ---")
+
                 for log in logs:
+                    print(f"Log: {log}")
                     # log.timestamp is a datetime object
                     if log.timestamp.date() == target_date:
                         user_id = str(log.user_id)
