@@ -181,8 +181,8 @@ class DeviceSyncService:
                     year=target_date.year, 
                     is_locked=True
                 ).exists():
-                    print(f"Skipping locked record for {employee}")
-                    continue
+                    print(f"Bypassing locked record for {employee} (Sync Forced)")
+                    # continue
 
                 # Create or Update Attendance
                 print(f"Saving attendance for {employee}: In={check_in}, Out={check_out}")
