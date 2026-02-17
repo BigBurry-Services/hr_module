@@ -83,12 +83,12 @@ class DeviceSyncService:
                 results['errors'].append(error_msg)
         
         # Process accumulated punches
-        count = self.process_punches(user_punches, target_date)
+        count = self.process_punches(user_punches, target_date, results)
         results['processed_count'] = count
         
         return results
 
-    def process_punches(self, user_punches, target_date):
+    def process_punches(self, user_punches, target_date, results):
         print(f"Processing punches for {len(user_punches)} users")
         count = 0
         for user_id, punches in user_punches.items():
