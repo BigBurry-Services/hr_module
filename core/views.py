@@ -1517,21 +1517,10 @@ def toggle_attendance_lock(request):
             if employee_id:
                 employees_to_lock.append(get_object_or_404(Employee, pk=employee_id))
             elif request.POST.get('lock_all') == 'true':
-                 # Requirement: month lock button enables when every day of that month is locked.
-                 # If it's a month lock (date_obj is None), double check if all days are locked for extra safety
+                 # Requirement: month lock button locks all days of that month.
                  if not date_obj and 'unlock' not in request.POST:
-                     num_days = calendar.monthrange(year, month)[1]
-                     locked_days_count = AttendanceLock.objects.filter(
-                         month=month,
-                         year=year,
-                         is_locked=True,
-                         date__isnull=False
-                     ).values('date').distinct().count()
-                     
-                     if locked_days_count < num_days:
-                         messages.error(request, "Cannot lock month. All days must be locked first.")
-                         return redirect(request.POST.get('next') or 'summary')
-
+                     # Lock all days and the month itself
+                     pass
                  employees_to_lock = Employee.objects.all()
             
             # Optimized Bulk Locking/Unlocking
@@ -1570,6 +1559,48 @@ def toggle_attendance_lock(request):
             
             if new_locks:
                 AttendanceLock.objects.bulk_create(new_locks)
+            
+            # --- Auto-lock all days if month lock is requested ---
+            if not date_obj and 'unlock' not in request.POST:
+                num_days = calendar.monthrange(year, month)[1]
+                all_new_day_locks = []
+                
+                # We need to ensure every employee has every day locked
+                # To be efficient, just lock what is missing
+                # It's easier to use a massive bulk operation or just loop
+                # First, ensure all existing day locks are set to True
+                AttendanceLock.objects.filter(
+                    month=month,
+                    year=year,
+                    date__isnull=False
+                ).update(is_locked=True)
+                
+                # Now find missing day locks and create them
+                existing_day_locks = AttendanceLock.objects.filter(
+                    month=month,
+                    year=year,
+                    date__isnull=False
+                )
+                
+                # Dictionary to quickly check if an employee has a lock for a day
+                # {(emp_id, day): True}
+                emp_day_map = set((lock.employee_id, lock.date.day) for lock in existing_day_locks)
+                
+                employees = Employee.objects.all()
+                for emp in employees:
+                    for day in range(1, num_days + 1):
+                        if (emp.id, day) not in emp_day_map:
+                            day_date = datetime.date(year, month, day)
+                            all_new_day_locks.append(AttendanceLock(
+                                employee=emp,
+                                date=day_date,
+                                month=month,
+                                year=year,
+                                is_locked=True
+                            ))
+                
+                if all_new_day_locks:
+                    AttendanceLock.objects.bulk_create(all_new_day_locks)
             
             # --- Automated Month Lock/Unlock Logic ---
             if date_obj: # Only trigger if we modified a day-level lock
@@ -2109,7 +2140,11 @@ def toggle_holiday(request):
         try:
              data = json.loads(request.body)
              date_str = data.get('date')
-             date_obj = datetime.datetime.strptime(date_str, '%Y-%m-%d').date()
+             if '-' in date_str:
+                 parts = date_str.split('-')
+                 date_obj = datetime.date(int(parts[0]), int(parts[1]), int(parts[2]))
+             else:
+                 date_obj = datetime.datetime.strptime(date_str, '%Y-%m-%d').date()
              # Toggle
              holiday = Holiday.objects.filter(date=date_obj).first()
              if holiday:
