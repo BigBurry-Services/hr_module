@@ -2750,11 +2750,13 @@ def update_single_attendance(request, employee_id):
             leave_type_id = request.POST.get(f'leave_type_{employee_id}')
             
             # Check for Lock
+            # A record is locked if either the specific day is locked, or the entire month is locked (date=None)
             if AttendanceLock.objects.filter(
                 employee=employee, 
                 month=date_obj.month, 
                 year=date_obj.year, 
-                is_locked=True
+                is_locked=True,
+                date__in=[date_obj, None]
             ).exists():
                 msg = f"Attendance for {employee.full_name} is locked regarding {date_obj.strftime('%B %Y')}."
                 if request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.GET.get('ajax'):
