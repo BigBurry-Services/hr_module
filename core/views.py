@@ -1635,6 +1635,46 @@ def toggle_attendance_lock(request):
                             mlock.save()
                         messages.info(request, f"Month {calendar.month_name[month]} {year} has been automatically finalized and locked.")
             # ------------------------------------------
+            
+            # --- Auto-mark Holidays as Paid Leave ---
+            if target_status: # Only when locking
+                holidays_to_process = []
+                if date_obj:
+                    if Holiday.objects.filter(date=date_obj).exists():
+                        holidays_to_process = [date_obj]
+                else:
+                    # For month lock, find all holidays in the month
+                    holidays_to_process = list(Holiday.objects.filter(date__year=year, date__month=month).values_list('date', flat=True))
+                
+                if holidays_to_process:
+                    for h_date in holidays_to_process:
+                        # Find existing leaves for these employees on this day
+                        existing_leaves_qs = Leave.objects.filter(
+                            employee__in=employees_to_lock,
+                            start_date__lte=h_date,
+                            end_date__gte=h_date
+                        )
+                        emp_ids_with_leave = set(existing_leaves_qs.values_list('employee_id', flat=True))
+                        
+                        # Update existing leaves to 'Paid' for these employees on this holiday
+                        existing_leaves_qs.update(leave_type='Paid', status='Approved')
+                        
+                        # Create new 'Paid' leave records for employees who have no leave on this holiday
+                        new_h_leaves = []
+                        for emp in employees_to_lock:
+                            if emp.id not in emp_ids_with_leave:
+                                new_h_leaves.append(Leave(
+                                    employee=emp,
+                                    start_date=h_date,
+                                    end_date=h_date,
+                                    leave_type='Paid',
+                                    reason='Holiday - Auto-marked on Lock',
+                                    status='Approved'
+                                ))
+                        
+                        if new_h_leaves:
+                            Leave.objects.bulk_create(new_h_leaves)
+            # ------------------------------------------
 
             if employees_to_lock:
                 if len(employees_to_lock) > 1:
@@ -2347,10 +2387,16 @@ def calculate_salary_for_month(employee, month, year):
                 leave_map[current] = leaves_req.leave_type
                 current += datetime.timedelta(days=1)
 
+    # Locks
+    employee_locks = AttendanceLock.objects.filter(employee=employee, month=month, year=year, is_locked=True)
+    locked_dates = {l.date for l in employee_locks if l.date}
+    is_month_locked_for_emp = employee_locks.filter(date__isnull=True).exists()
+
     current_iter_date = start_date
     while current_iter_date <= end_date:
         day_record = att_map.get(current_iter_date)
         has_record = day_record is not None
+        is_locked_day = is_month_locked_for_emp or current_iter_date in locked_dates
         
         if day_record and day_record.check_in_time and day_record.check_out_time:
                 check_in = datetime.datetime.combine(current_iter_date, day_record.check_in_time)
@@ -2365,7 +2411,9 @@ def calculate_salary_for_month(employee, month, year):
                     if seconds < 0: seconds = 0
                     
                     if current_iter_date in holiday_set:
-                        total_regular_seconds += 28800
+                        # Rule: All work on holiday is overtime. Paid leave credit only if locked.
+                        if is_locked_day:
+                            total_regular_seconds += 28800
                         total_overtime_seconds += seconds
                     else:
                         if seconds > 28800:
@@ -2380,7 +2428,9 @@ def calculate_salary_for_month(employee, month, year):
                     if l_type == 'Paid':
                         total_regular_seconds += 28800
                 elif current_iter_date in holiday_set:
-                    total_regular_seconds += 28800
+                    # Rule: Holiday is treated as paid leave (8h regular) ONLY when locked.
+                    if is_locked_day:
+                        total_regular_seconds += 28800
         
         current_iter_date += datetime.timedelta(days=1)
 
