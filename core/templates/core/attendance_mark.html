@@ -482,8 +482,9 @@
                         <option value="unpaid" {% if leave.leave_type|matches:'Unpaid' %}selected{% endif %}>Unpaid
                             Leave</option>
                         {% for lt in leave_types %}
-                        <option value="{{ lt.id }}" {% if leave.reason|startswith:lt.name %}selected{% endif %}>{{
-                            lt.name }}</option>
+                        <option value="{{ lt.id }}" {% if leave.reason|startswith:lt.name %}selected{% endif %}>
+                            {{ lt.name }}
+                        </option>
                         {% endfor %}
                         {% else %}
                         <option value="unpaid">Unpaid Leave</option>
