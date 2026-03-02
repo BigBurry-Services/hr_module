@@ -2756,7 +2756,10 @@ def update_single_attendance(request, employee_id):
                 year=date_obj.year, 
                 is_locked=True
             ).exists():
-                messages.error(request, f"Attendance for {employee.full_name} is locked regarding {date_obj.strftime('%B %Y')}.")
+                msg = f"Attendance for {employee.full_name} is locked regarding {date_obj.strftime('%B %Y')}."
+                if request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.GET.get('ajax'):
+                    return JsonResponse({'status': 'error', 'message': msg}, status=403)
+                messages.error(request, msg)
                 # Redirect back to prevent processing
                 return redirect('attendance_mark')
 
