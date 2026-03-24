@@ -2894,6 +2894,66 @@ def update_single_attendance(request, employee_id):
     return redirect('attendance_mark')
 
 @hr_required
+def edit_attendance_times(request):
+    """
+    AJAX view to update or create check_in/check_out times for an attendance record
+    directly from the salary summary page. Requires the unlock password.
+    Handles both existing records (attendance_id) and "Not Done" rows (employee_id + date).
+    """
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Invalid request method.'}, status=405)
+
+    UNLOCK_PASSWORD = "1234"
+    password = request.POST.get('password', '')
+    if password != UNLOCK_PASSWORD:
+        return JsonResponse({'status': 'error', 'message': 'Incorrect password.'}, status=403)
+
+    attendance_id = request.POST.get('attendance_id', '').strip()
+    employee_id = request.POST.get('employee_id', '').strip()
+    date_str = request.POST.get('date', '').strip()
+    check_in_str = request.POST.get('check_in_time', '').strip()
+    check_out_str = request.POST.get('check_out_time', '').strip()
+
+    try:
+        check_in_time = datetime.datetime.strptime(check_in_str, '%H:%M').time() if check_in_str else None
+        check_out_time = datetime.datetime.strptime(check_out_str, '%H:%M').time() if check_out_str else None
+
+        action = request.POST.get('action', 'update')
+
+        if action == 'mark_absent':
+            if attendance_id:
+                attendance = get_object_or_404(Attendance, pk=attendance_id)
+                attendance.delete()
+            return JsonResponse({'status': 'success', 'message': 'Marked as absent.'})
+
+        if attendance_id:
+            attendance = get_object_or_404(Attendance, pk=attendance_id)
+            attendance.check_in_time = check_in_time
+            attendance.check_out_time = check_out_time
+            attendance.is_manual = True
+            attendance.save()
+        elif employee_id and date_str:
+            employee = get_object_or_404(Employee, pk=employee_id)
+            date_obj = datetime.datetime.strptime(date_str, '%Y-%m-%d').date()
+            attendance, _ = Attendance.objects.get_or_create(
+                employee=employee,
+                date=date_obj,
+                defaults={'check_in_time': check_in_time, 'check_out_time': check_out_time, 'is_manual': True}
+            )
+            attendance.check_in_time = check_in_time
+            attendance.check_out_time = check_out_time
+            attendance.is_manual = True
+            attendance.save()
+        else:
+            return JsonResponse({'status': 'error', 'message': 'Missing attendance reference.'}, status=400)
+
+        return JsonResponse({'status': 'success', 'message': 'Attendance times updated successfully.'})
+
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': f'Error updating attendance: {str(e)}'}, status=500)
+
+
+@hr_required
 def update_manual_adjustment(request):
     if request.method == 'POST':
         employee_id = request.POST.get('employee_id')
