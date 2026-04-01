@@ -1816,22 +1816,47 @@ def export_attendance_csv(request):
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
 
     writer = csv.writer(response)
-    writer.writerow(['Date', 'Employee Code', 'Employee Name', 'Department', 'Check In', 'Check Out', 'Notes'])
+    writer.writerow(['Date', 'Employee Code', 'Employee Name', 'Department', 'Check In', 'Check Out', 'Status', 'Notes'])
 
-    # Filter Attendance
-    attendance_records = Attendance.objects.filter(date=selected_date)
+    # Get Employees
+    employees = Employee.objects.all()
     if selected_dept_id:
-        attendance_records = attendance_records.filter(employee__department_id=selected_dept_id)
+        employees = employees.filter(department_id=selected_dept_id)
         
-    for att in attendance_records:
+    # Get Attendance Map for Date
+    attendance_records = Attendance.objects.filter(date=selected_date)
+    att_map = {att.employee_id: att for att in attendance_records}
+    
+    # Get Leave Map for Date
+    leaves = Leave.objects.filter(start_date__lte=selected_date, end_date__gte=selected_date, status='Approved')
+    leave_map = {l.employee_id: l.leave_type for l in leaves}
+
+    for emp in employees:
+        att = att_map.get(emp.id)
+        leave_type = leave_map.get(emp.id)
+        
+        status = "Absent"
+        check_in = ""
+        check_out = ""
+        notes = ""
+        
+        if att:
+            status = "Present"
+            check_in = att.check_in_time
+            check_out = att.check_out_time
+            notes = att.notes
+        elif leave_type:
+            status = f"On Leave ({leave_type})"
+            
         writer.writerow([
-            att.date,
-            att.employee.employee_code,
-            att.employee.full_name,
-            att.employee.department.name if att.employee.department else 'N/A',
-            att.check_in_time,
-            att.check_out_time,
-            att.notes
+            selected_date,
+            emp.employee_code,
+            emp.full_name,
+            emp.department.name if emp.department else 'N/A',
+            check_in,
+            check_out,
+            status,
+            notes
         ])
 
     return response
