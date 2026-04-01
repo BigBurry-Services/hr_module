@@ -459,7 +459,16 @@
             </tbody>
         </table>
 
-        <h3 class="mt-4">Daily Attendance Log</h3>
+        <div class="d-flex justify-content-between align-items-center mt-4 mb-2">
+            <h3>Daily Attendance Log</h3>
+            <div id="hr_toggle_container" class="hr-toggle-container">
+                <label class="hr-toggle-label" for="hr_edit_mode_switch">Edit Mode</label>
+                <label class="hr-switch">
+                    <input type="checkbox" id="hr_edit_mode_switch" onclick="toggleEditMode()">
+                    <span class="hr-slider"></span>
+                </label>
+            </div>
+        </div>
         <table class="excel-table">
             <thead>
                 <tr>
@@ -679,7 +688,7 @@
                         <label class="form-label fw-semibold">Check Out Time</label>
                         <input type="time" id="edit_att_check_out" class="form-control">
                     </div>
-                    <div class="mb-3">
+                    <div class="mb-3" id="edit_att_password_container">
                         <label class="form-label fw-semibold">Unlock Password</label>
                         <input type="password" id="edit_att_password" class="form-control" placeholder="Enter password">
                     </div>
@@ -874,6 +883,54 @@
 </script>
 
 <script>
+    // These will be synchronized with the global state
+    let editModeActive = false;
+    let editModePassword = '';
+
+    function syncWithGlobalEditMode() {
+        const mode = window.getHRMgmtEditMode();
+        editModeActive = mode.active;
+        editModePassword = mode.password || '';
+        updateEditModeUI();
+    }
+
+    function toggleEditMode() {
+        if (editModeActive) {
+            window.clearHRMgmtEditMode();
+        } else {
+            const pass = prompt("Enter Unlock Password to enable Edit Mode (Valid for 30 mins):");
+            if (pass === null) return; 
+            if (pass === "1234") { 
+                window.setHRMgmtEditMode(pass);
+                alert("Edit Mode Enabled for 30 minutes.");
+            } else {
+                alert("Incorrect Password.");
+            }
+        }
+    }
+
+    function updateEditModeUI() {
+        const container = document.getElementById('hr_toggle_container');
+        const checkbox = document.getElementById('hr_edit_mode_switch');
+        if (!checkbox || !container) return;
+        
+        checkbox.checked = editModeActive;
+        if (editModeActive) {
+            container.classList.add('active');
+        } else {
+            container.classList.remove('active');
+        }
+    }
+
+    // Initialize and listen for changes
+    window.addEventListener('hrEditModeChanged', syncWithGlobalEditMode);
+    document.addEventListener('DOMContentLoaded', syncWithGlobalEditMode);
+
+    // Also check on modal open just in case it expired while page was open
+    $(document).on('show.bs.modal', '#editAttendanceTimesModal', syncWithGlobalEditMode);
+</script>
+
+<script>
     function openEditAttendanceModal(attendanceId, employeeId, date, checkIn, checkOut) {
         document.getElementById('edit_att_id').value = attendanceId || '';
         document.getElementById('edit_att_employee_id').value = employeeId || '';
@@ -892,7 +949,16 @@
             // Existing record — go straight to time edit, show absent option
             document.getElementById('edit_att_check_in').value = checkIn || '';
             document.getElementById('edit_att_check_out').value = checkOut || '';
-            document.getElementById('edit_att_password').value = '';
+            document.getElementById('edit_att_password').value = editModeActive ? editModePassword : '';
+            
+            // Hide password field if edit mode is active
+            const passContainer = document.getElementById('edit_att_password_container');
+            if (editModeActive) {
+                passContainer.style.display = 'none';
+            } else {
+                passContainer.style.display = 'block';
+            }
+
             document.getElementById('edit_att_error').classList.add('d-none');
             document.getElementById('edit_att_save_btn').disabled = false;
             document.getElementById('edit_att_save_btn').textContent = 'Save';
@@ -903,8 +969,10 @@
 
         var modal = new bootstrap.Modal(document.getElementById('editAttendanceTimesModal'));
         modal.show();
-        if (attendanceId) {
+        if (attendanceId && !editModeActive) {
             setTimeout(function() { document.getElementById('edit_att_password').focus(); }, 400);
+        } else if (attendanceId && editModeActive) {
+            setTimeout(function() { document.getElementById('edit_att_check_in').focus(); }, 400);
         }
     }
 
@@ -913,7 +981,15 @@
         document.getElementById('edit_att_step1').classList.add('d-none');
         document.getElementById('edit_att_check_in').value = '';
         document.getElementById('edit_att_check_out').value = '';
-        document.getElementById('edit_att_password').value = '';
+        document.getElementById('edit_att_password').value = editModeActive ? editModePassword : '';
+
+        // Hide password field if edit mode is active
+        const passContainer = document.getElementById('edit_att_password_container');
+        if (editModeActive) {
+            passContainer.style.display = 'none';
+        } else {
+            passContainer.style.display = 'block';
+        }
         document.getElementById('edit_att_error').classList.add('d-none');
         document.getElementById('edit_att_save_btn').disabled = false;
         document.getElementById('edit_att_save_btn').textContent = 'Save';

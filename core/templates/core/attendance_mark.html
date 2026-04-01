@@ -294,6 +294,13 @@
 <div class="action-toolbar no-print">
     <div class="auto-save-notice">
         <i class="fas fa-magic text-primary"></i> Changes are saved automatically
+        <div id="hr_toggle_container" class="hr-toggle-container ms-3">
+            <label class="hr-toggle-label" for="hr_edit_mode_switch">Edit Mode</label>
+            <label class="hr-switch">
+                <input type="checkbox" id="hr_edit_mode_switch" onclick="toggleEditMode()">
+                <span class="hr-slider"></span>
+            </label>
+        </div>
     </div>
     <div style="display: flex; align-items: center; gap: 0.75rem;">
         <span id="sync-status" style="font-size: 1rem; font-weight: 500;"></span>
@@ -307,8 +314,8 @@
             <input type="hidden" name="next" value="{% url 'attendance_mark' %}?date={{ selected_date }}">
             <input type="hidden" name="unlock" value="true">
             <input type="hidden" name="unlock_password" id="unlock_password_input_day">
-            <button type="button" class="btn btn-outline-warning btn-sm" data-bs-toggle="modal"
-                data-bs-target="#unlockModal" onclick="window.unlockTargetForm = 'unlock-day-form';"
+            <button type="button" class="btn btn-outline-warning btn-sm" 
+                onclick="if(editModeActive){ window.unlockTargetForm = 'unlock-day-form'; submitUnlockForm(); } else { window.unlockTargetForm = 'unlock-day-form'; new bootstrap.Modal(document.getElementById('unlockModal')).show(); }"
                 style="border-radius: 8px;">
                 <i class="fas fa-lock-open"></i> Unlock Day
             </button>
@@ -532,7 +539,13 @@
 
 <script>
     function submitUnlockForm() {
-        const password = document.getElementById('modal_unlock_password').value;
+        const mode = window.getHRMgmtEditMode();
+        let password = document.getElementById('modal_unlock_password').value;
+        
+        if (!password && mode.active) {
+            password = mode.password;
+        }
+
         if (password) {
             const formId = window.unlockTargetForm || 'unlock-form-mark';
             const form = document.getElementById(formId);
@@ -545,6 +558,47 @@
             alert("Please enter a password.");
         }
     }
+
+    let editModeActive = false;
+    let editModePassword = '';
+
+    function syncWithGlobalEditMode() {
+        const mode = window.getHRMgmtEditMode();
+        editModeActive = mode.active;
+        editModePassword = mode.password || '';
+        updateEditModeUI();
+    }
+
+    function toggleEditMode() {
+        if (editModeActive) {
+            window.clearHRMgmtEditMode();
+        } else {
+            const pass = prompt("Enter Unlock Password to enable Edit Mode (Valid for 30 mins):");
+            if (pass === null) return; 
+            if (pass === "1234") { 
+                window.setHRMgmtEditMode(pass);
+                alert("Edit Mode Enabled for 30 minutes.");
+            } else {
+                alert("Incorrect Password.");
+            }
+        }
+    }
+
+    function updateEditModeUI() {
+        const container = document.getElementById('hr_toggle_container');
+        const checkbox = document.getElementById('hr_edit_mode_switch');
+        if (!checkbox || !container) return;
+        
+        checkbox.checked = editModeActive;
+        if (editModeActive) {
+            container.classList.add('active');
+        } else {
+            container.classList.remove('active');
+        }
+    }
+
+    window.addEventListener('hrEditModeChanged', syncWithGlobalEditMode);
+    document.addEventListener('DOMContentLoaded', syncWithGlobalEditMode);
 
     document.addEventListener('DOMContentLoaded', function () {
         // ... previous JS ...
