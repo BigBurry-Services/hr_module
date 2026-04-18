@@ -459,8 +459,40 @@
             </tbody>
         </table>
 
+        {% if summary_data.leave_balance %}
+        <h3 class="mt-4">Leave Balance ({{ summary_data.month }})</h3>
+        <table class="excel-table mb-4">
+            <thead>
+                <tr>
+                    <th>Leave Type</th>
+                    <th class="text-center">Allowed</th>
+                    <th class="text-center">Used</th>
+                    <th class="text-center">Remaining</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for lb in summary_data.leave_balance %}
+                <tr>
+                    <td>{{ lb.name }}</td>
+                    <td class="text-center">{{ lb.allowed }}</td>
+                    <td class="text-center" style="{% if lb.used > 0 %}color:#dc3545; font-weight:600;{% endif %}">{{ lb.used }}</td>
+                    <td class="text-center">
+                        {% if lb.remaining == 0 %}
+                        <span class="badge bg-danger">Exhausted</span>
+                        {% elif lb.remaining <= 2 %}
+                        <span style="color:#fd7e14; font-weight:600;">{{ lb.remaining }}</span>
+                        {% else %}
+                        <span style="color:#198754; font-weight:600;">{{ lb.remaining }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+
         <div class="d-flex justify-content-between align-items-center mt-4 mb-2">
-            <h3>Daily Attendance Log</h3>
+        <h3>Daily Attendance Log</h3>
             <div id="hr_toggle_container" class="hr-toggle-container">
                 <label class="hr-toggle-label" for="hr_edit_mode_switch">Edit Mode</label>
                 <label class="hr-switch">

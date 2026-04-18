@@ -563,6 +563,32 @@ def attendance_mark(request):
     # Get Leave Types
     leave_types = LeaveType.objects.all()
 
+    # Build leave usage map: how many days of each leave type each employee has used this year
+    # Structure: {employee_id: {leave_type_id: days_used}}
+    employee_ids_list = list(employees.values_list('id', flat=True))
+    year_leaves = Leave.objects.filter(
+        employee_id__in=employee_ids_list,
+        start_date__year=selected_year,
+        status='Approved',
+        leave_type='Paid'
+    )
+    leave_types_list = list(leave_types)
+    leave_usage_map = {emp_id: {lt.id: 0 for lt in leave_types_list} for emp_id in employee_ids_list}
+    for lv in year_leaves:
+        emp_id = lv.employee_id
+        days = (lv.end_date - lv.start_date).days + 1
+        for lt in leave_types_list:
+            if lv.reason == lt.name or lv.reason.startswith(lt.name):
+                if emp_id in leave_usage_map:
+                    leave_usage_map[emp_id][lt.id] = leave_usage_map[emp_id].get(lt.id, 0) + days
+                break
+    # Exhausted map: {employee_id: set of leave_type_ids where limit is reached}
+    leave_exhausted_map = {
+        emp_id: {lt_id for lt_id, used in lt_map.items()
+                 if used >= next((lt.days_allowed for lt in leave_types_list if lt.id == lt_id), 0)}
+        for emp_id, lt_map in leave_usage_map.items()
+    }
+
     # Check if month is locked (Check if ANY employee is locked, or check specific logic)
     # Check if month is locked (Check if ANY employee is locked, or check specific logic)
     is_month_locked = AttendanceLock.objects.filter(
@@ -626,7 +652,9 @@ def attendance_mark(request):
         'can_lock_month': can_lock_month,
         'month_day_locks': list(month_day_locks),
         'years': range(today.year - 2, today.year + 2),
-        'months': list(enumerate(calendar.month_name))[1:]
+        'months': list(enumerate(calendar.month_name))[1:],
+        'leave_usage_map': leave_usage_map,
+        'leave_exhausted_map': leave_exhausted_map,
     }
     return render(request, 'core/attendance_mark.html', context)
 
@@ -1212,6 +1240,28 @@ def summary(request):
             }
             slip_rows.append(row)
 
+        # Leave balance for the selected year
+        leave_types_all = LeaveType.objects.all()
+        year_emp_leaves = Leave.objects.filter(
+            employee=employee,
+            start_date__year=year,
+            status='Approved',
+            leave_type='Paid'
+        )
+        leave_balance = []
+        for lt in leave_types_all:
+            days_used = sum(
+                (lv.end_date - lv.start_date).days + 1
+                for lv in year_emp_leaves
+                if lv.reason == lt.name or lv.reason.startswith(lt.name)
+            )
+            leave_balance.append({
+                'name': lt.name,
+                'allowed': lt.days_allowed,
+                'used': days_used,
+                'remaining': max(lt.days_allowed - days_used, 0),
+            })
+
         summary_data = {
             'employee_name': employee.full_name if employee else "All Employees",
             'employee_code': employee.employee_code if employee else "-",
@@ -1257,7 +1307,8 @@ def summary(request):
              'total_paid_leaves': paid_leaves_count, # NEW Field
              'slip_rows': slip_rows,
              
-             'attendance_list': full_attendance_list
+             'attendance_list': full_attendance_list,
+             'leave_balance': leave_balance,
         }
 
         if action == 'download_pdf':
